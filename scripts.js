@@ -42,11 +42,13 @@
     function extractDocumentInfo() {
         const section = document.querySelector('section');
         if (section) {
-            const filename = section.getAttribute('file');
-            const words = section.getAttribute('words');
-            const segments = section.getAttribute('segments');
-            const avgConf = section.getAttribute('avgConf');
+            const filename = section.getAttribute('srcName');
+            const words = section.getAttribute('ocrWordsCount');
+            const segments = section.getAttribute('ocrSegmentsCount');
+            const avgConf = section.getAttribute('averageOcrConfidence');
             const angle = section.getAttribute('angle');
+            const imgWidth = section.getAttribute('imgWidth');
+            const imgHeight = section.getAttribute('imgHeight');
             
             // Store metadata for display
             window.ocrMetadata = {
@@ -54,7 +56,9 @@
                 words: parseInt(words) || 0,
                 segments: parseInt(segments) || 0,
                 avgConf: parseFloat(avgConf) || 0,
-                angle: parseFloat(angle) || 0
+                angle: parseFloat(angle) || 0,
+                imgWidth: parseInt(imgWidth) || 0,
+                imgHeight: parseInt(imgHeight) || 0
             };
             
             // Set background image path
@@ -65,69 +69,103 @@
     }
     
     function createControlPanel() {
+        // Create elements using DOM methods instead of innerHTML for XML compatibility
         const controlPanel = document.createElement('div');
         controlPanel.className = 'control-panel';
-        controlPanel.innerHTML = `
-            <div class="hover-hint">Hover for controls...</div>
-            <h3>OCR Display Controls</h3>
-            
-            <div class="control-group">
-                <label for="toggle-background">Background Image</label>
-                <div class="toggle-switch">
-                    <input type="checkbox" id="toggle-background" checked>
-                    <span class="slider"></span>
-                </div>
-            </div>
-            
-            <div class="control-group">
-                <label for="toggle-line-boxes">Line Boxes</label>
-                <div class="toggle-switch">
-                    <input type="checkbox" id="toggle-line-boxes">
-                    <span class="slider"></span>
-                </div>
-            </div>
-            
-            <div class="control-group">
-                <label for="toggle-word-boxes">Word Boxes</label>
-                <div class="toggle-switch">
-                    <input type="checkbox" id="toggle-word-boxes">
-                    <span class="slider"></span>
-                </div>
-            </div>
-            
-            <div class="control-group">
-                <label for="toggle-text">Text Content</label>
-                <div class="toggle-switch">
-                    <input type="checkbox" id="toggle-text" checked>
-                    <span class="slider"></span>
-                </div>
-            </div>
-            
-            <div class="confidence-legend">
-                <h4>Confidence Legend</h4>
-                <div class="legend-item">
-                    <div class="legend-color legend-high"></div>
-                    <span>High (≥80%)</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color legend-med"></div>
-                    <span>Medium (50-79%)</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color legend-low"></div>
-                    <span>Low (<50%)</span>
-                </div>
-            </div>
-            
-            <div class="stats">
-                <div id="ocr-stats"></div>
-            </div>
-        `;
+        
+        // Hover hint
+        const hoverHint = document.createElement('div');
+        hoverHint.className = 'hover-hint';
+        hoverHint.textContent = 'Hover for controls...';
+        controlPanel.appendChild(hoverHint);
+        
+        // Title
+        const title = document.createElement('h3');
+        title.textContent = 'OCR Display Controls';
+        controlPanel.appendChild(title);
+        
+        // Background Image Control
+        controlPanel.appendChild(createControlGroup('toggle-background', 'Background Image', true));
+        
+        // Line Boxes Control
+        controlPanel.appendChild(createControlGroup('toggle-line-boxes', 'Line Boxes', false));
+        
+        // Word Boxes Control
+        controlPanel.appendChild(createControlGroup('toggle-word-boxes', 'Word Boxes', false));
+        
+        // Text Content Control
+        controlPanel.appendChild(createControlGroup('toggle-text', 'Text Content', true));
+        
+        // Confidence Legend
+        const legend = document.createElement('div');
+        legend.className = 'confidence-legend';
+        
+        const legendTitle = document.createElement('h4');
+        legendTitle.textContent = 'Confidence Legend';
+        legend.appendChild(legendTitle);
+        
+        legend.appendChild(createLegendItem('legend-high', 'High (≥80%)'));
+        legend.appendChild(createLegendItem('legend-med', 'Medium (50-79%)'));
+        legend.appendChild(createLegendItem('legend-low', 'Low (<50%)'));
+        
+        controlPanel.appendChild(legend);
+        
+        // Stats container
+        const stats = document.createElement('div');
+        stats.className = 'stats';
+        const statsDiv = document.createElement('div');
+        statsDiv.id = 'ocr-stats';
+        stats.appendChild(statsDiv);
+        controlPanel.appendChild(stats);
         
         document.body.appendChild(controlPanel);
         
         // Update stats
         updateStats();
+    }
+    
+    function createControlGroup(id, label, checked) {
+        const group = document.createElement('div');
+        group.className = 'control-group';
+        
+        const labelEl = document.createElement('label');
+        labelEl.setAttribute('for', id);
+        labelEl.textContent = label;
+        
+        const toggleSwitch = document.createElement('div');
+        toggleSwitch.className = 'toggle-switch';
+        
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.id = id;
+        if (checked) input.checked = true;
+        
+        const slider = document.createElement('span');
+        slider.className = 'slider';
+        
+        toggleSwitch.appendChild(input);
+        toggleSwitch.appendChild(slider);
+        
+        group.appendChild(labelEl);
+        group.appendChild(toggleSwitch);
+        
+        return group;
+    }
+    
+    function createLegendItem(colorClass, text) {
+        const item = document.createElement('div');
+        item.className = 'legend-item';
+        
+        const color = document.createElement('div');
+        color.className = 'legend-color ' + colorClass;
+        
+        const span = document.createElement('span');
+        span.textContent = text;
+        
+        item.appendChild(color);
+        item.appendChild(span);
+        
+        return item;
     }
     
     function setupBackgroundImage() {
@@ -139,14 +177,17 @@
         bgImage.className = 'background-image';
         bgImage.style.backgroundImage = `url('${CONFIG.backgroundImagePath}')`;
         
-        // Wrap existing content
-        const existingContent = section.innerHTML;
-        section.innerHTML = '';
-        section.appendChild(bgImage);
-        
+        // Move existing children to content div instead of using innerHTML
         const contentDiv = document.createElement('div');
         contentDiv.className = 'ocr-content';
-        contentDiv.innerHTML = existingContent;
+        
+        // Move all existing children to the content div
+        while (section.firstChild) {
+            contentDiv.appendChild(section.firstChild);
+        }
+        
+        // Add background image and content div back to section
+        section.appendChild(bgImage);
         section.appendChild(contentDiv);
     }
     
@@ -264,11 +305,25 @@
         const statsDiv = document.getElementById('ocr-stats');
         if (statsDiv && window.ocrMetadata) {
             const meta = window.ocrMetadata;
-            statsDiv.innerHTML = `
-                <div>${meta.segments} lines, ${meta.words} words</div>
-                <div>Avg confidence: ${(meta.avgConf * 100).toFixed(1)}%</div>
-                <div>Page angle: ${meta.angle.toFixed(1)}°</div>
-            `;
+            
+            // Clear existing content
+            while (statsDiv.firstChild) {
+                statsDiv.removeChild(statsDiv.firstChild);
+            }
+            
+            // Create stats elements
+            const line1 = document.createElement('div');
+            line1.textContent = `${meta.segments} lines, ${meta.words} words`;
+            
+            const line2 = document.createElement('div');
+            line2.textContent = `Avg confidence: ${(meta.avgConf * 100).toFixed(1)}%`;
+            
+            const line3 = document.createElement('div');
+            line3.textContent = `Page angle: ${meta.angle.toFixed(1)}°`;
+            
+            statsDiv.appendChild(line1);
+            statsDiv.appendChild(line2);
+            statsDiv.appendChild(line3);
         }
     }
     
@@ -293,12 +348,36 @@
             pointer-events: none;
         `;
         
-        popup.innerHTML = `
-            <div><strong>Word:</strong> "${text}"</div>
-            <div><strong>Confidence:</strong> ${(confidence * 100).toFixed(1)}%</div>
-            <div><strong>Index:</strong> ${wordIndex}</div>
-            <div><strong>Bounds:</strong> ${boundingBox ? boundingBox.split(',').map(n => parseFloat(n).toFixed(0)).join(', ') : 'N/A'}</div>
-        `;
+        // Create content using DOM methods for XML compatibility
+        const line1 = document.createElement('div');
+        const strong1 = document.createElement('strong');
+        strong1.textContent = 'Word:';
+        line1.appendChild(strong1);
+        line1.appendChild(document.createTextNode(` "${text}"`));
+        
+        const line2 = document.createElement('div');
+        const strong2 = document.createElement('strong');
+        strong2.textContent = 'Confidence:';
+        line2.appendChild(strong2);
+        line2.appendChild(document.createTextNode(` ${(confidence * 100).toFixed(1)}%`));
+        
+        const line3 = document.createElement('div');
+        const strong3 = document.createElement('strong');
+        strong3.textContent = 'Index:';
+        line3.appendChild(strong3);
+        line3.appendChild(document.createTextNode(` ${wordIndex}`));
+        
+        const line4 = document.createElement('div');
+        const strong4 = document.createElement('strong');
+        strong4.textContent = 'Bounds:';
+        line4.appendChild(strong4);
+        const boundsText = boundingBox ? boundingBox.split(',').map(n => parseFloat(n).toFixed(0)).join(', ') : 'N/A';
+        line4.appendChild(document.createTextNode(` ${boundsText}`));
+        
+        popup.appendChild(line1);
+        popup.appendChild(line2);
+        popup.appendChild(line3);
+        popup.appendChild(line4);
         
         // Position popup near the word
         const rect = wordElement.getBoundingClientRect();
