@@ -29,17 +29,28 @@ The Win11 OneOCR Semantic XHTML5 format creates browser-renderable OCR documents
 - **Line Boxes**: Display detected text line boundaries
 - **Word Boxes**: Show individual word bounding boxes with confidence colors
 - **Text Toggle**: Hide/show OCR text content
-- **Keyboard Shortcuts**: Ctrl+1-4 for quick toggling
+- **Layout Mode Toggle**: Switch between overlay and stacked layout modes
+- **Keyboard Shortcuts**: Ctrl+1-5 for quick toggling
 
 ### Confidence Visualization
 - **High Confidence (≥80%)**: Green borders
 - **Medium Confidence (50-79%)**: Orange borders  
 - **Low Confidence (<50%)**: Red borders
 
+### Layout Modes
+- **Overlay Mode**: Text overlays precisely on the background image using coordinate data
+  - Words positioned using x1,y1...x4,y4 coordinates from OCR
+  - Automatic text rotation calculation from coordinate bounds
+  - Real-time scaling to match image dimensions
+- **Stacked Mode**: Image displayed above OCR text in vertical layout
+  - OCR section maintains same dimensions as image
+  - Better for reading text content
+  
 ### Responsive Design
 - **Desktop**: Floating control panel with hover reveal
 - **Mobile**: Inline controls for touch interfaces
 - **Accessibility**: Keyboard navigation and screen reader support
+- **Automatic Positioning**: Overlay coordinates adapt to window resize
 
 ## Technical Details
 

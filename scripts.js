@@ -17,6 +17,7 @@
         showLineBoxes: false,
         showWordBoxes: false,
         showText: true,
+        layoutMode: 'overlay', // 'overlay' or 'stacked'
         initialized: false
     };
     
@@ -31,7 +32,9 @@
         extractDocumentInfo();
         createControlPanel();
         setupBackgroundImage();
+        calculateImageDimensions();
         classifyWordsByConfidence();
+        positionWordsAccurately();
         bindEventHandlers();
         updateDisplay();
         
@@ -95,6 +98,9 @@
         
         // Text Content Control
         controlPanel.appendChild(createControlGroup('toggle-text', 'Text Content', true));
+        
+        // Layout Mode Control
+        controlPanel.appendChild(createLayoutModeControl());
         
         // Confidence Legend
         const legend = document.createElement('div');
@@ -168,6 +174,34 @@
         return item;
     }
     
+    function createLayoutModeControl() {
+        const group = document.createElement('div');
+        group.className = 'control-group';
+        
+        const labelEl = document.createElement('label');
+        labelEl.setAttribute('for', 'layout-mode');
+        labelEl.textContent = 'Stacked Layout';
+        
+        const toggleSwitch = document.createElement('div');
+        toggleSwitch.className = 'toggle-switch';
+        
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.id = 'layout-mode';
+        input.checked = state.layoutMode === 'stacked';
+        
+        const slider = document.createElement('span');
+        slider.className = 'slider';
+        
+        toggleSwitch.appendChild(input);
+        toggleSwitch.appendChild(slider);
+        
+        group.appendChild(labelEl);
+        group.appendChild(toggleSwitch);
+        
+        return group;
+    }
+    
     function setupBackgroundImage() {
         const section = document.querySelector('section');
         if (!section || !CONFIG.backgroundImagePath) return;
@@ -189,6 +223,142 @@
         // Add background image and content div back to section
         section.appendChild(bgImage);
         section.appendChild(contentDiv);
+        
+        // Set initial layout mode
+        section.classList.add('layout-' + state.layoutMode);
+    }
+    
+    function calculateImageDimensions() {
+        const section = document.querySelector('section');
+        if (!section) return;
+        
+        const imgWidth = parseInt(section.getAttribute('imgWidth')) || 800;
+        const imgHeight = parseInt(section.getAttribute('imgHeight')) || 600;
+        const aspectRatio = imgWidth / imgHeight;
+        
+        // Set CSS custom properties for layout calculations
+        section.style.setProperty('--image-width', imgWidth + 'px');
+        section.style.setProperty('--image-height', imgHeight + 'px');
+        section.style.setProperty('--image-aspect-ratio', aspectRatio);
+        
+        // Store for positioning calculations
+        window.ocrImageDimensions = {
+            width: imgWidth,
+            height: imgHeight,
+            aspectRatio: aspectRatio
+        };
+    }
+    
+    function updateLayoutMode() {
+        const section = document.querySelector('section');
+        if (!section) return;
+        
+        // Remove existing layout classes
+        section.classList.remove('layout-overlay', 'layout-stacked');
+        
+        // Add current layout class
+        section.classList.add('layout-' + state.layoutMode);
+        
+        // Recalculate positioning if needed
+        if (state.layoutMode === 'overlay') {
+            positionWordsAccurately();
+        }
+    }
+    
+    function positionWordsAccurately() {
+        if (state.layoutMode !== 'overlay') return;
+        
+        const section = document.querySelector('section');
+        const contentDiv = document.querySelector('.ocr-content');
+        if (!section || !contentDiv || !window.ocrImageDimensions) return;
+        
+        const imageDims = window.ocrImageDimensions;
+        const sectionRect = section.getBoundingClientRect();
+        
+        // Calculate scale factors
+        const scaleX = sectionRect.width / imageDims.width;
+        const scaleY = sectionRect.height / imageDims.height;
+        
+        // Use the smaller scale to maintain aspect ratio
+        const scale = Math.min(scaleX, scaleY);
+        
+        // Calculate offset to center the image
+        const scaledWidth = imageDims.width * scale;
+        const scaledHeight = imageDims.height * scale;
+        const offsetX = (sectionRect.width - scaledWidth) / 2;
+        const offsetY = (sectionRect.height - scaledHeight) / 2;
+        
+        // Position each word based on its coordinates
+        document.querySelectorAll('w').forEach(word => {
+            const bounds = word.getAttribute('b');
+            if (!bounds) return;
+            
+            const coords = bounds.split(',').map(n => parseFloat(n));
+            if (coords.length !== 8) return;
+            
+            const [x1, y1, x2, y2, x3, y3, x4, y4] = coords;
+            
+            // Calculate word center and dimensions
+            const centerX = (x1 + x2 + x3 + x4) / 4;
+            const centerY = (y1 + y2 + y3 + y4) / 4;
+            
+            // Calculate rotation angle from the quad coordinates
+            const angle = calculateTextRotation(x1, y1, x2, y2, x3, y3, x4, y4);
+            
+            // Scale and position the word
+            const scaledX = centerX * scale + offsetX;
+            const scaledY = centerY * scale + offsetY;
+            
+            // Apply positioning and rotation
+            word.style.left = scaledX + 'px';
+            word.style.top = scaledY + 'px';
+            word.style.transform = `translate(-50%, -50%) rotate(${angle}deg)`;
+            
+            // Calculate word dimensions for better positioning
+            const wordWidth = Math.abs(x2 - x1) * scale;
+            const wordHeight = Math.abs(y3 - y1) * scale;
+            word.style.minWidth = wordWidth + 'px';
+            word.style.minHeight = wordHeight + 'px';
+        });
+        
+        // Position segments (lines) as well
+        document.querySelectorAll('segment').forEach(segment => {
+            const bounds = segment.getAttribute('b');
+            if (!bounds) return;
+            
+            const coords = bounds.split(',').map(n => parseFloat(n));
+            if (coords.length !== 8) return;
+            
+            const [x1, y1, x2, y2, x3, y3, x4, y4] = coords;
+            
+            // Calculate segment position and size
+            const left = Math.min(x1, x2, x3, x4) * scale + offsetX;
+            const top = Math.min(y1, y2, y3, y4) * scale + offsetY;
+            const width = (Math.max(x1, x2, x3, x4) - Math.min(x1, x2, x3, x4)) * scale;
+            const height = (Math.max(y1, y2, y3, y4) - Math.min(y1, y2, y3, y4)) * scale;
+            
+            segment.style.left = left + 'px';
+            segment.style.top = top + 'px';
+            segment.style.width = width + 'px';
+            segment.style.height = height + 'px';
+        });
+    }
+    
+    function calculateTextRotation(x1, y1, x2, y2, x3, y3, x4, y4) {
+        // Calculate the primary direction vector (usually top edge)
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        
+        // Calculate angle in radians, then convert to degrees
+        const angleRad = Math.atan2(dy, dx);
+        const angleDeg = angleRad * (180 / Math.PI);
+        
+        // Normalize to -45 to 45 degrees for better readability
+        let normalizedAngle = angleDeg;
+        if (normalizedAngle > 45) normalizedAngle -= 90;
+        if (normalizedAngle < -45) normalizedAngle += 90;
+        
+        return normalizedAngle;
     }
     
     function classifyWordsByConfidence() {
@@ -212,6 +382,17 @@
     }
     
     function bindEventHandlers() {
+        // Window resize handler for responsive positioning
+        window.addEventListener('resize', function() {
+            if (state.layoutMode === 'overlay') {
+                // Debounce resize events
+                clearTimeout(window.resizeTimeout);
+                window.resizeTimeout = setTimeout(function() {
+                    positionWordsAccurately();
+                }, 250);
+            }
+        });
+        
         // Control panel toggles
         document.getElementById('toggle-background').addEventListener('change', function(e) {
             state.showBackground = e.target.checked;
@@ -230,6 +411,13 @@
         
         document.getElementById('toggle-text').addEventListener('change', function(e) {
             state.showText = e.target.checked;
+            updateDisplay();
+        });
+        
+        // Layout mode toggle
+        document.getElementById('layout-mode').addEventListener('change', function(e) {
+            state.layoutMode = e.target.checked ? 'stacked' : 'overlay';
+            updateLayoutMode();
             updateDisplay();
         });
         
@@ -259,6 +447,10 @@
                     case '4':
                         e.preventDefault();
                         toggleText();
+                        break;
+                    case '5':
+                        e.preventDefault();
+                        toggleLayoutMode();
                         break;
                 }
             }
@@ -298,6 +490,11 @@
             section.classList.add('hide-text');
         } else {
             section.classList.remove('hide-text');
+        }
+        
+        // Update word positioning if in overlay mode
+        if (state.layoutMode === 'overlay') {
+            positionWordsAccurately();
         }
     }
     
@@ -427,6 +624,13 @@
         setState: function(newState) {
             Object.assign(state, newState);
             updateDisplay();
+        },
+        
+        toggleLayoutMode: function() {
+            state.layoutMode = state.layoutMode === 'overlay' ? 'stacked' : 'overlay';
+            document.getElementById('layout-mode').checked = state.layoutMode === 'stacked';
+            updateLayoutMode();
+            updateDisplay();
         }
     };
     
@@ -435,5 +639,6 @@
     function toggleLineBoxes() { window.ocrControls.toggleLineBoxes(); }
     function toggleWordBoxes() { window.ocrControls.toggleWordBoxes(); }
     function toggleText() { window.ocrControls.toggleText(); }
+    function toggleLayoutMode() { window.ocrControls.toggleLayoutMode(); }
     
 })();

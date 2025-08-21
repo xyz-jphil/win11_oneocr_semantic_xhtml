@@ -19,8 +19,34 @@ section {
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
-/* Background image layer */
-.background-image {
+/* Layout modes */
+section.layout-stacked {
+    overflow: visible;
+}
+
+section.layout-stacked .background-image {
+    position: relative;
+    width: 100%;
+    height: auto;
+    aspect-ratio: var(--image-aspect-ratio, 4/3);
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    border-bottom: 1px solid #ddd;
+    z-index: 1;
+    opacity: 1;
+}
+
+section.layout-stacked .ocr-content {
+    position: relative;
+    width: 100%;
+    height: auto;
+    min-height: var(--image-height, 400px);
+    z-index: 2;
+    padding: 20px;
+}
+
+section.layout-overlay .background-image {
     position: absolute;
     top: 0;
     left: 0;
@@ -31,15 +57,27 @@ section {
     background-position: center;
     z-index: 1;
     opacity: 0.8;
+}
+
+section.layout-overlay .ocr-content {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 2;
+    padding: 0;
+    min-height: var(--image-height, 400px);
+}
+
+/* Background image layer - default overlay mode */
+.background-image {
     transition: opacity 0.3s ease;
 }
 
-/* OCR content layer */
+/* OCR content layer - default overlay mode */
 .ocr-content {
-    position: relative;
-    z-index: 2;
-    padding: 20px;
-    min-height: 400px;
+    transition: all 0.3s ease;
 }
 
 /* Segment (line) styling */
@@ -66,13 +104,30 @@ segment:hover.show-line-boxes {
 
 /* Word styling */
 w {
-    display: inline;
-    position: relative;
-    margin: 0 1px;
+    display: inline-block;
+    position: absolute;
+    margin: 0;
     padding: 1px 2px;
     border-radius: 2px;
     transition: all 0.2s ease;
     cursor: default;
+    transform-origin: center;
+    white-space: nowrap;
+}
+
+/* Words in stacked mode flow naturally */
+section.layout-stacked w {
+    position: relative;
+    display: inline;
+    margin: 0 1px;
+}
+
+/* Segments in overlay mode are positioned absolutely */
+section.layout-overlay segment {
+    position: absolute;
+    margin: 0;
+    padding: 0;
+    line-height: 1;
 }
 
 /* Word confidence-based styling */
