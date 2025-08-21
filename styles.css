@@ -80,14 +80,14 @@ section.layout-overlay .ocr-content {
     transition: all 0.3s ease;
 }
 
-/* Segment (line) styling */
+/* Segment (line) styling - compact for original layout */
 segment {
     display: block;
     position: relative;
-    margin: 8px 0;
-    line-height: 1.4;
+    margin: 2px 0;
+    line-height: 1.2;
     border: 2px dashed transparent;
-    padding: 2px 4px;
+    padding: 1px 2px;
     border-radius: 3px;
     transition: all 0.3s ease;
 }
@@ -117,9 +117,21 @@ w {
 
 /* Words in stacked mode flow naturally */
 section.layout-stacked w {
-    position: relative;
-    display: inline;
-    margin: 0 1px;
+    position: relative !important;
+    display: inline !important;
+    margin: 0 1px !important;
+    width: auto !important;
+    height: auto !important;
+    transform: none !important;
+    font-size: inherit !important;
+    line-height: inherit !important;
+}
+
+/* Words in overlay mode are positioned absolutely */
+section.layout-overlay w {
+    position: absolute !important;
+    display: flex !important;
+    margin: 0 !important;
 }
 
 /* Segments in overlay mode are positioned absolutely */
@@ -128,6 +140,13 @@ section.layout-overlay segment {
     margin: 0;
     padding: 0;
     line-height: 1;
+}
+
+/* Segments in stacked mode flow naturally */
+section.layout-stacked segment {
+    position: relative !important;
+    display: block !important;
+    margin: 8px 0 !important;
 }
 
 /* Word confidence-based styling */
@@ -351,6 +370,58 @@ input:checked + .slider:before {
     border-top: 1px solid #eee;
     font-size: 10px;
     color: #888;
+}
+
+/* Hide original content when custom overlay is active */
+.hide-original-content segment,
+.hide-original-content w {
+    display: none !important;
+}
+
+/* Custom overlay container */
+.custom-overlay-container {
+    position: relative;
+    width: 100%;
+    margin-bottom: 20px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.custom-overlay-image {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-width: 100%;
+}
+
+.custom-overlay-text {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+.custom-overlay-word {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+    cursor: default;
+    border-radius: 2px;
+    transition: all 0.2s ease;
+    transform-origin: center;
+    white-space: nowrap;
+    font-family: Arial, sans-serif;
+}
+
+.custom-overlay-word:hover {
+    background-color: rgba(100, 150, 255, 0.2);
+    z-index: 10;
 }
 
 /* Animation for smooth transitions */

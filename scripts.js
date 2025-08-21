@@ -17,7 +17,8 @@
         showLineBoxes: false,
         showWordBoxes: false,
         showText: true,
-        layoutMode: 'overlay', // 'overlay' or 'stacked'
+        layoutMode: 'original', // 'original' or 'custom-overlay'
+        hideOriginalContent: false,
         initialized: false
     };
     
@@ -31,10 +32,8 @@
         
         extractDocumentInfo();
         createControlPanel();
-        setupBackgroundImage();
-        calculateImageDimensions();
+        setupOriginalLayout();
         classifyWordsByConfidence();
-        positionWordsAccurately();
         bindEventHandlers();
         updateDisplay();
         
@@ -101,6 +100,9 @@
         
         // Layout Mode Control
         controlPanel.appendChild(createLayoutModeControl());
+        
+        // Hide Original Content Control
+        controlPanel.appendChild(createControlGroup('hide-original', 'Hide Original Layout', false));
         
         // Confidence Legend
         const legend = document.createElement('div');
@@ -180,7 +182,7 @@
         
         const labelEl = document.createElement('label');
         labelEl.setAttribute('for', 'layout-mode');
-        labelEl.textContent = 'Stacked Layout';
+        labelEl.textContent = 'Custom Overlay Mode';
         
         const toggleSwitch = document.createElement('div');
         toggleSwitch.className = 'toggle-switch';
@@ -188,7 +190,7 @@
         const input = document.createElement('input');
         input.type = 'checkbox';
         input.id = 'layout-mode';
-        input.checked = state.layoutMode === 'stacked';
+        input.checked = state.layoutMode === 'custom-overlay';
         
         const slider = document.createElement('span');
         slider.className = 'slider';
@@ -270,7 +272,10 @@
         
         const section = document.querySelector('section');
         const contentDiv = document.querySelector('.ocr-content');
-        if (!section || !contentDiv || !window.ocrImageDimensions) return;
+        if (!section || !contentDiv || !window.ocrImageDimensions) {
+            console.log('Missing elements for positioning:', { section, contentDiv, imageDims: window.ocrImageDimensions });
+            return;
+        }
         
         const imageDims = window.ocrImageDimensions;
         const sectionRect = section.getBoundingClientRect();
@@ -288,13 +293,30 @@
         const offsetX = (sectionRect.width - scaledWidth) / 2;
         const offsetY = (sectionRect.height - scaledHeight) / 2;
         
+        console.log('Positioning debug:', {
+            imageDims,
+            sectionRect: { width: sectionRect.width, height: sectionRect.height },
+            scale,
+            scaledWidth,
+            scaledHeight,
+            offsetX,
+            offsetY
+        });
+        
         // Position each word based on its coordinates
-        document.querySelectorAll('w').forEach(word => {
+        let wordCount = 0;
+        document.querySelectorAll('w').forEach((word, index) => {
             const bounds = word.getAttribute('b');
-            if (!bounds) return;
+            if (!bounds) {
+                console.log(`Word ${index} has no bounds attribute`);
+                return;
+            }
             
             const coords = bounds.split(',').map(n => parseFloat(n));
-            if (coords.length !== 8) return;
+            if (coords.length !== 8) {
+                console.log(`Word ${index} has invalid coords:`, coords);
+                return;
+            }
             
             const [x1, y1, x2, y2, x3, y3, x4, y4] = coords;
             
@@ -309,17 +331,45 @@
             const scaledX = centerX * scale + offsetX;
             const scaledY = centerY * scale + offsetY;
             
+            // Calculate word dimensions - use proper width/height calculation
+            const wordWidth = Math.max(
+                Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2),
+                Math.sqrt((x4 - x3) ** 2 + (y4 - y3) ** 2)
+            ) * scale;
+            const wordHeight = Math.max(
+                Math.sqrt((x3 - x2) ** 2 + (y3 - y2) ** 2),
+                Math.sqrt((x4 - x1) ** 2 + (y4 - y1) ** 2)
+            ) * scale;
+            
             // Apply positioning and rotation
+            word.style.position = 'absolute';
             word.style.left = scaledX + 'px';
             word.style.top = scaledY + 'px';
             word.style.transform = `translate(-50%, -50%) rotate(${angle}deg)`;
+            word.style.width = Math.max(wordWidth, word.textContent.length * 8) + 'px'; // Minimum based on text length
+            word.style.height = Math.max(wordHeight, 16) + 'px'; // Minimum height
+            word.style.lineHeight = Math.max(wordHeight, 16) + 'px';
+            word.style.display = 'flex';
+            word.style.alignItems = 'center';
+            word.style.justifyContent = 'center';
+            word.style.whiteSpace = 'nowrap';
+            word.style.fontSize = Math.max(wordHeight * 0.8, 12) + 'px';
             
-            // Calculate word dimensions for better positioning
-            const wordWidth = Math.abs(x2 - x1) * scale;
-            const wordHeight = Math.abs(y3 - y1) * scale;
-            word.style.minWidth = wordWidth + 'px';
-            word.style.minHeight = wordHeight + 'px';
+            // Debug first few words
+            if (index < 3) {
+                console.log(`Word ${index} "${word.textContent}":`, {
+                    coords: [x1, y1, x2, y2, x3, y3, x4, y4],
+                    center: [centerX, centerY],
+                    scaled: [scaledX, scaledY],
+                    dimensions: [wordWidth, wordHeight],
+                    angle
+                });
+            }
+            
+            wordCount++;
         });
+        
+        console.log(`Positioned ${wordCount} words in overlay mode`);
         
         // Position segments (lines) as well
         document.querySelectorAll('segment').forEach(segment => {
