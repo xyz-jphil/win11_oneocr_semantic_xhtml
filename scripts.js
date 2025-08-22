@@ -1,4 +1,4 @@
-// OCR XHTML Interactive Controls
+// OCR XHTML Interactive Controls - Virtual DOM Approach
 (function() {
     'use strict';
     
@@ -7,16 +7,32 @@
         confidenceThresholds: {
             high: 0.8,
             med: 0.5
+        }
+    };
+    
+    // Virtual DOM - OCR Data Model
+    let ocrData = {
+        metadata: {
+            filename: '',
+            imageWidth: 0,
+            imageHeight: 0,
+            angle: 0,
+            averageConfidence: 0,
+            totalWords: 0,
+            totalLines: 0
         },
-        backgroundImagePath: null // Will be determined from the document
+        lines: [], // Each line contains: {id, boundingBox, words: [{text, confidence, index, boundingBox}]}
+        backgroundImagePath: null
     };
     
     // State management
     const state = {
-        showBackground: true,
         showLineBoxes: false,
         showWordBoxes: false,
         showText: true,
+        enableHoverControls: true,
+        showSVGSection: true,
+        showSVGBackground: false,
         initialized: false
     };
     
@@ -28,48 +44,143 @@
     function initializeOCRViewer() {
         if (state.initialized) return;
         
-        extractDocumentInfo();
+        // Build virtual DOM from XHTML
+        buildVirtualDOMFromXHTML();
+        
+        // Clean up existing DOM and rebuild
+        cleanupDOM();
         createControlPanel();
-        setupBackgroundImage();
-        classifyWordsByConfidence();
+        setupHTMLSection();
+        createSVGSection();
         bindEventHandlers();
         updateDisplay();
         
         state.initialized = true;
-        console.log('OCR XHTML Viewer initialized');
+        console.log('OCR XHTML Viewer initialized with Virtual DOM');
+        
+        // Debug: Export 3rd line SVG elements to console for comparison
+        setTimeout(() => exportLineSVGToConsole(2), 1000);
     }
     
-    function extractDocumentInfo() {
+    /**
+     * Build virtual DOM data structure from XHTML elements
+     */
+    function buildVirtualDOMFromXHTML() {
         const section = document.querySelector('section.win11OneOcrPage');
-        if (section) {
-            const filename = section.getAttribute('srcName');
-            const words = section.getAttribute('ocrWordsCount');
-            const segments = section.getAttribute('ocrSegmentsCount');
-            const avgConf = section.getAttribute('averageOcrConfidence');
-            const angle = section.getAttribute('angle');
-            const imgWidth = section.getAttribute('imgWidth');
-            const imgHeight = section.getAttribute('imgHeight');
-            
-            // Store metadata for display
-            window.ocrMetadata = {
-                filename: filename || 'Unknown',
-                words: parseInt(words) || 0,
-                segments: parseInt(segments) || 0,
-                avgConf: parseFloat(avgConf) || 0,
-                angle: parseFloat(angle) || 0,
-                imgWidth: parseInt(imgWidth) || 0,
-                imgHeight: parseInt(imgHeight) || 0
+        if (!section) return;
+        
+        // Extract metadata
+        ocrData.metadata = {
+            filename: section.getAttribute('srcName') || 'Unknown',
+            imageWidth: parseInt(section.getAttribute('imgWidth')) || 800,
+            imageHeight: parseInt(section.getAttribute('imgHeight')) || 600,
+            angle: parseFloat(section.getAttribute('angle')) || 0,
+            averageConfidence: parseFloat(section.getAttribute('averageOcrConfidence')) || 0,
+            totalWords: parseInt(section.getAttribute('ocrWordsCount')) || 0,
+            totalLines: parseInt(section.getAttribute('ocrSegmentsCount')) || 0
+        };
+        
+        ocrData.backgroundImagePath = ocrData.metadata.filename;
+        
+        // Extract lines and words
+        ocrData.lines = [];
+        const segments = document.querySelectorAll('segment');
+        
+        segments.forEach((segment, lineIndex) => {
+            const lineData = {
+                id: lineIndex,
+                boundingBox: null, // segments don't have bounding boxes in our format
+                words: []
             };
             
-            // Set background image path
-            if (filename) {
-                CONFIG.backgroundImagePath = filename;
-            }
-        }
+            const words = segment.querySelectorAll('w');
+            words.forEach((word, wordIndex) => {
+                const boundingBox = word.getAttribute('b');
+                const wordData = {
+                    text: word.textContent.trim(),
+                    confidence: parseFloat(word.getAttribute('p')) || 0,
+                    index: parseInt(word.getAttribute('i')) || wordIndex,
+                    boundingBox: boundingBox ? parseBoundingBox(boundingBox) : null
+                };
+                lineData.words.push(wordData);
+            });
+            
+            ocrData.lines.push(lineData);
+        });
+        
+        console.log('Virtual DOM built:', ocrData);
+        console.log(`Image dimensions: ${ocrData.metadata.imageWidth} x ${ocrData.metadata.imageHeight}`);
     }
     
+    /**
+     * Parse bounding box string "x1,y1,x2,y2" into object with validation
+     */
+    function parseBoundingBox(boundingBoxStr) {
+        const coords = boundingBoxStr.split(',').map(parseFloat);
+        if (coords.length >= 8) {
+            // Use all 8 coordinates for 4-point polygon (x1,y1,x2,y2,x3,y3,x4,y4)
+            const result = {
+                x1: coords[0],
+                y1: coords[1],
+                x2: coords[2], 
+                y2: coords[3],
+                x3: coords[4],
+                y3: coords[5],
+                x4: coords[6],
+                y4: coords[7]
+            };
+            
+            return result;
+        }
+        return null;
+    }
+    
+    /**
+     * Check if element is or is contained within an element with given ID
+     * (Compatible replacement for closest())
+     */
+    function isElementOrChild(element, parentId) {
+        if (!element) return false;
+        
+        // Check current element
+        if (element.id === parentId) return true;
+        
+        // Check parents up the tree
+        let current = element.parentElement;
+        while (current) {
+            if (current.id === parentId) return true;
+            current = current.parentElement;
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Clean up existing hover controls and other dynamically added elements
+     */
+    function cleanupDOM() {
+        // Remove existing control panel
+        const existingPanel = document.querySelector('.control-panel');
+        if (existingPanel) existingPanel.remove();
+        
+        // Remove existing hover controls
+        document.querySelectorAll('.copy-controls, .info-popup').forEach(el => el.remove());
+        
+        // Remove existing SVG section
+        const existingSVG = document.querySelector('.svg-content');
+        if (existingSVG) existingSVG.remove();
+        
+        // Remove page copy button
+        document.querySelectorAll('section.win11OneOcrPage button').forEach(el => el.remove());
+        
+        // Remove background image elements
+        document.querySelectorAll('.background-image').forEach(el => el.remove());
+    }
+    
+    /**
+     * Create control panel using virtual DOM data
+     */
     function createControlPanel() {
-        // Create elements using DOM methods instead of innerHTML for XML compatibility
         const controlPanel = document.createElement('div');
         controlPanel.className = 'control-panel';
         
@@ -84,9 +195,6 @@
         title.textContent = 'OCR Display Controls';
         controlPanel.appendChild(title);
         
-        // Background Image Control
-        controlPanel.appendChild(createControlGroup('toggle-background', 'Background Image', true));
-        
         // Line Boxes Control
         controlPanel.appendChild(createControlGroup('toggle-line-boxes', 'Line Boxes', false));
         
@@ -95,6 +203,15 @@
         
         // Text Content Control
         controlPanel.appendChild(createControlGroup('toggle-text', 'Text Content', true));
+        
+        // Hover Controls Toggle
+        controlPanel.appendChild(createControlGroup('toggle-hover-controls', 'Hover Controls', true));
+        
+        // SVG Section Toggle
+        controlPanel.appendChild(createControlGroup('toggle-svg-section', 'SVG Section', true));
+        
+        // SVG Background Toggle
+        controlPanel.appendChild(createControlGroup('toggle-svg-background', 'SVG Background', false));
         
         // Confidence Legend
         const legend = document.createElement('div');
@@ -168,63 +285,467 @@
         return item;
     }
     
-    function setupBackgroundImage() {
+    /**
+     * Setup HTML section with clean hover controls
+     */
+    function setupHTMLSection() {
         const section = document.querySelector('section.win11OneOcrPage');
-        if (!section || !CONFIG.backgroundImagePath) return;
+        if (!section) return;
         
-        // Create background image element
-        const bgImage = document.createElement('div');
-        bgImage.className = 'background-image';
-        bgImage.style.backgroundImage = `url('${CONFIG.backgroundImagePath}')`;
-        
-        // Check if ocrContent wrapper already exists
-        const existingContent = section.querySelector('.ocrContent');
-        if (!existingContent) {
-            // Move existing children to content div
-            const contentDiv = document.createElement('div');
-            contentDiv.className = 'ocrContent';
-            
-            // Move all existing children to the content div
-            while (section.firstChild) {
-                contentDiv.appendChild(section.firstChild);
+        // Apply confidence classes to words and line numbers to segments
+        ocrData.lines.forEach((line, lineIndex) => {
+            // Add line number to segment
+            const segmentElement = document.querySelector(`segment:nth-child(${lineIndex + 1})`);
+            if (segmentElement) {
+                segmentElement.setAttribute('data-line-number', lineIndex + 1);
             }
             
-            // Add background image and content div back to section
-            section.appendChild(bgImage);
-            section.appendChild(contentDiv);
-        } else {
-            // ocrContent already exists, just add background
-            section.insertBefore(bgImage, existingContent);
+            line.words.forEach((wordData, wordIndex) => {
+                const wordElement = document.querySelector(`segment:nth-child(${lineIndex + 1}) w:nth-child(${wordIndex + 1})`);
+                if (wordElement) {
+                    // Clear existing classes
+                    wordElement.className = '';
+                    
+                    // Add confidence class
+                    if (wordData.confidence >= CONFIG.confidenceThresholds.high) {
+                        wordElement.classList.add('confidence-high');
+                    } else if (wordData.confidence >= CONFIG.confidenceThresholds.med) {
+                        wordElement.classList.add('confidence-med');
+                    } else {
+                        wordElement.classList.add('confidence-low');
+                    }
+                }
+            });
+        });
+        
+        // Add clean hover controls
+        addCleanHoverControls();
+        
+        // Add copy page button
+        addPageCopyButton();
+    }
+    
+    /**
+     * Add simplified hover controls - only segment-level copy
+     */
+    function addCleanHoverControls() {
+        const section = document.querySelector('section.win11OneOcrPage');
+        if (!section) return;
+        
+        let hideTimeout = null;
+        
+        // Add controls to lines (segments) only
+        const segments = document.querySelectorAll('segment');
+        segments.forEach((segment, lineIndex) => {
+            segment.addEventListener('mouseenter', (e) => {
+                if (!state.enableHoverControls) return;
+                clearTimeout(hideTimeout);
+                showLineControls(e, lineIndex, segment);
+            });
+            
+            segment.addEventListener('mouseleave', (e) => {
+                // Delay hiding to allow moving to the control
+                hideTimeout = setTimeout(() => {
+                    const controls = document.getElementById('floating-controls');
+                    if (controls && e.relatedTarget && !isElementOrChild(e.relatedTarget, 'floating-controls')) {
+                        hideControls();
+                    } else if (!controls) {
+                        hideControls();
+                    }
+                }, 100);
+            });
+        });
+        
+        // Add global listener to handle controls hover
+        document.addEventListener('mouseover', (e) => {
+            if (isElementOrChild(e.target, 'floating-controls')) {
+                clearTimeout(hideTimeout);
+            }
+        });
+        
+        document.addEventListener('mouseleave', (e) => {
+            if (isElementOrChild(e.target, 'floating-controls')) {
+                hideTimeout = setTimeout(hideControls, 100);
+            }
+        });
+    }
+    
+    /**
+     * Show line controls with copy icon - positioned on right side
+     */
+    function showLineControls(event, lineIndex, segmentElement) {
+        hideControls(); // Clear existing
+        
+        const lineData = ocrData.lines[lineIndex];
+        if (!lineData) return;
+        
+        const controls = createFloatingControls();
+        controls.style.cssText = `
+            position: absolute;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 3px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            z-index: 1000;
+            white-space: nowrap;
+            pointer-events: auto;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        `;
+        
+        // Create copy button with copy icon
+        const copyButton = document.createElement('button');
+        copyButton.innerHTML = '⧉'; // Copy icon
+        copyButton.title = `Copy line ${lineIndex + 1}`;
+        copyButton.style.cssText = `
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-size: 12px;
+            padding: 2px 4px;
+            border-radius: 2px;
+        `;
+        copyButton.onclick = () => copyLineText(lineIndex);
+        copyButton.onmouseenter = () => copyButton.style.background = 'rgba(255, 255, 255, 0.2)';
+        copyButton.onmouseleave = () => copyButton.style.background = 'none';
+        
+        controls.appendChild(copyButton);
+        
+        positionControlsWithinElement(controls, segmentElement, 'line');
+        document.body.appendChild(controls);
+    }
+    
+    /**
+     * Create floating controls element
+     */
+    function createFloatingControls() {
+        const controls = document.createElement('div');
+        controls.id = 'floating-controls';
+        controls.style.cssText = `
+            position: absolute;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            z-index: 1000;
+            white-space: nowrap;
+            pointer-events: auto;
+        `;
+        return controls;
+    }
+    
+    /**
+     * Position floating controls within element boundaries
+     */
+    function positionControlsWithinElement(controls, element, type) {
+        const rect = element.getBoundingClientRect();
+        const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        
+        if (type === 'line') {
+            // For lines, position copy button at the right edge, centered vertically
+            const x = rect.right + scrollLeft - 25; // Small offset from right edge
+            const y = rect.top + scrollTop + (rect.height / 2) - 10; // Center vertically
+            
+            controls.style.left = x + 'px';
+            controls.style.top = y + 'px';
         }
     }
     
-    function classifyWordsByConfidence() {
-        const words = document.querySelectorAll('w');
-        words.forEach(word => {
-            const confidence = parseFloat(word.getAttribute('p'));
-            
-            if (confidence >= CONFIG.confidenceThresholds.high) {
-                word.classList.add('confidence-high');
-            } else if (confidence >= CONFIG.confidenceThresholds.med) {
-                word.classList.add('confidence-med');
-            } else {
-                word.classList.add('confidence-low');
-            }
-            
-            // Add tooltip with confidence info
-            const wordIndex = word.getAttribute('i');
-            const boundingBox = word.getAttribute('b');
-            word.title = `Word: "${word.textContent.trim()}"\\nConfidence: ${(confidence * 100).toFixed(1)}%\\nIndex: ${wordIndex}`;
+    /**
+     * Hide all floating controls
+     */
+    function hideControls() {
+        const existing = document.getElementById('floating-controls');
+        if (existing) existing.remove();
+    }
+    
+    /**
+     * Add page copy button
+     */
+    function addPageCopyButton() {
+        const section = document.querySelector('section.win11OneOcrPage');
+        if (!section) return;
+        
+        const copyBtn = document.createElement('button');
+        copyBtn.textContent = 'Copy Page';
+        copyBtn.style.cssText = `
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            z-index: 40;
+        `;
+        copyBtn.onclick = copyPageText;
+        
+        section.appendChild(copyBtn);
+    }
+    
+    /**
+     * Copy functions using virtual DOM - clean text only
+     */
+    function copyLineText(lineIndex) {
+        const lineData = ocrData.lines[lineIndex];
+        if (!lineData) return;
+        
+        const text = lineData.words.map(word => word.text).join(' ');
+        copyToClipboard(text);
+    }
+    
+    function copyPageText() {
+        const allText = ocrData.lines
+            .map(line => line.words.map(word => word.text).join(' '))
+            .join('\n');  // Use actual newline character, not escaped string
+        copyToClipboard(allText);
+    }
+    
+    function copyToClipboard(text) {
+        navigator.clipboard.writeText(text).then(() => {
+            showNotification('Copied to clipboard!');
+        }).catch(err => {
+            console.error('Failed to copy text: ', err);
+            showNotification('Copy failed - see console');
         });
     }
     
-    function bindEventHandlers() {
-        // Control panel toggles
-        document.getElementById('toggle-background').addEventListener('change', function(e) {
-            state.showBackground = e.target.checked;
-            updateDisplay();
+    function showNotification(message) {
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 4px;
+            z-index: 1000;
+            font-size: 12px;
+        `;
+        notification.textContent = message;
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 2000);
+    }
+    
+    /**
+     * Create SVG section using virtual DOM data - following Java implementation
+     */
+    function createSVGSection() {
+        const section = document.querySelector('section.win11OneOcrPage');
+        const ocrContent = document.querySelector('.ocrContent');
+        if (!section || !ocrContent) return;
+        
+        // Create SVG container - responsive
+        const svgContainer = document.createElement('div');
+        svgContainer.className = 'svg-content';
+        svgContainer.style.cssText = `
+            position: relative;
+            margin-top: 20px;
+            border-top: 2px solid #ddd;
+            padding: 20px;
+            background: #fafafa;
+            overflow: auto;
+            max-width: 100%;
+        `;
+        
+        // Add title
+        const title = document.createElement('h3');
+        title.textContent = 'Precise SVG Layout';
+        title.style.cssText = 'margin: 0 0 15px 0; color: #666; font-size: 14px;';
+        svgContainer.appendChild(title);
+        
+        // Generate SVG from virtual DOM
+        const svgElement = generateSVGFromVirtualDOM();
+        svgContainer.appendChild(svgElement);
+        
+        // Add after ocrContent
+        ocrContent.parentNode.insertBefore(svgContainer, ocrContent.nextSibling);
+    }
+    
+    /**
+     * Generate SVG from virtual DOM - following Java SvgVisualizer approach
+     */
+    function generateSVGFromVirtualDOM() {
+        // Use exact image dimensions from metadata (matching Java implementation)
+        const svgWidth = ocrData.metadata.imageWidth || 800;
+        const svgHeight = ocrData.metadata.imageHeight || 600;
+        
+        // Create responsive SVG (matching Java implementation structure)
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('width', svgWidth);
+        svg.setAttribute('height', svgHeight);
+        svg.setAttribute('viewBox', `0 0 ${svgWidth} ${svgHeight}`);
+        svg.style.cssText = `
+            border: 1px solid #ccc;
+            background: white;
+            width: 100%;
+            height: auto;
+        `;
+        
+        // Add styles (matching Java implementation)
+        const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+        const style = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+        style.textContent = `
+            .line-box { fill: none; stroke: #000000; stroke-width: 0.8; stroke-dasharray: 4,2; }
+            .word-box-high { fill: none; stroke: #00aa00; stroke-width: 0.6; stroke-dasharray: 2,1; }
+            .word-box-med { fill: none; stroke: #ffaa00; stroke-width: 0.6; stroke-dasharray: 2,1; }
+            .word-box-low { fill: none; stroke: #ff0000; stroke-width: 0.6; stroke-dasharray: 2,1; }
+            .word-text { font-family: Arial, sans-serif; font-size: 12px; fill: #0066cc; font-weight: bold; }
+            .svg-layer { display: block; }
+            .svg-layer.hidden { display: none; }
+        `;
+        defs.appendChild(style);
+        svg.appendChild(defs);
+        
+        // Background image layer (matching Java implementation)
+        if (ocrData.backgroundImagePath) {
+            const bgGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            bgGroup.setAttribute('id', 'svg-background-layer');
+            bgGroup.setAttribute('class', 'svg-layer hidden');
+            
+            const bgImage = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+            bgImage.setAttribute('href', ocrData.backgroundImagePath);
+            bgImage.setAttribute('x', '0');
+            bgImage.setAttribute('y', '0');
+            bgImage.setAttribute('width', svgWidth);
+            bgImage.setAttribute('height', svgHeight);
+            bgImage.setAttribute('preserveAspectRatio', 'none'); // Matching Java: preserveAspectRatio="none"
+            bgImage.setAttribute('opacity', '1.0'); // Full opacity initially, can be controlled
+            
+            bgGroup.appendChild(bgImage);
+            svg.appendChild(bgGroup);
+        }
+        
+        // Line boxes layer (matching Java sample)
+        const lineBoxGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        lineBoxGroup.setAttribute('id', 'svg-line-boxes');
+        lineBoxGroup.setAttribute('class', 'svg-layer hidden');
+        
+        // Word boxes layer
+        const wordBoxGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        wordBoxGroup.setAttribute('id', 'svg-word-boxes');
+        wordBoxGroup.setAttribute('class', 'svg-layer hidden');
+        
+        // Text layer
+        const textGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        textGroup.setAttribute('id', 'svg-text-layer');
+        textGroup.setAttribute('class', 'svg-layer');
+        
+        // Add line boxes (if we had line bounding box data)
+        // Note: Our current format doesn't have line bounding boxes, only word bounding boxes
+        // This would need line-level bounding box data to implement properly
+        
+        // Add words from virtual DOM
+        ocrData.lines.forEach((line, lineIndex) => {
+            line.words.forEach((word, wordIndex) => {
+                if (!word.boundingBox) return;
+                
+                const bbox = word.boundingBox;
+                const confidence = word.confidence;
+                
+                // Word bounding box - use actual 4-point polygon coordinates (matching Java implementation)
+                const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                // Ensure proper polygon closure (Java seems to correct x4 to match x1 for proper rectangle)
+                const points = `${bbox.x1},${bbox.y1} ${bbox.x2},${bbox.y2} ${bbox.x3},${bbox.y3} ${bbox.x1},${bbox.y4}`;
+                polygon.setAttribute('points', points);
+                polygon.setAttribute('class', getConfidenceClass(confidence));
+                polygon.setAttribute('id', `word-${lineIndex}-${wordIndex}`);
+                
+                // Word text (exactly matching Java SvgVisualizer logic)
+                const boxHeight = Math.abs(bbox.y3 - bbox.y1); // Java: Math.abs(bbox.y3() - bbox.y1())
+                const fontSize = Math.max(8, Math.min(boxHeight * 0.7, 24)); // Java: Math.max(8, Math.min(boxHeight * 0.7, 24))
+                const textX = Math.min(bbox.x1, bbox.x4) + 2; // Java: Math.min(bbox.x1(), bbox.x4()) + 2
+                const textY = Math.min(bbox.y1, bbox.y2) + (boxHeight * 0.75); // Java: Math.min(bbox.y1(), bbox.y2()) + (boxHeight * 0.75)
+                
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('x', textX.toFixed(1));
+                text.setAttribute('y', textY.toFixed(1));
+                text.setAttribute('class', 'word-text');
+                text.setAttribute('style', `font-size: ${fontSize.toFixed(1)}px;`);
+                text.setAttribute('title', `Confidence: ${(word.confidence * 100).toFixed(1)}%`);
+                text.textContent = word.text;
+                
+                // Add hover effect
+                const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                group.style.cursor = 'pointer';
+                group.appendChild(polygon);
+                group.appendChild(text.cloneNode(true));
+                
+                // Click handler
+                group.addEventListener('click', () => {
+                    showSVGWordDetails(word, event);
+                });
+                
+                wordBoxGroup.appendChild(polygon.cloneNode(true));
+                textGroup.appendChild(text);
+            });
         });
         
+        svg.appendChild(lineBoxGroup);
+        svg.appendChild(wordBoxGroup);
+        svg.appendChild(textGroup);
+        
+        return svg;
+    }
+    
+    function getConfidenceClass(confidence) {
+        if (confidence >= CONFIG.confidenceThresholds.high) return 'word-box-high';
+        if (confidence >= CONFIG.confidenceThresholds.med) return 'word-box-med';
+        return 'word-box-low';
+    }
+    
+    function showSVGWordDetails(word, event) {
+        const popup = document.createElement('div');
+        popup.style.cssText = `
+            position: fixed;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-size: 12px;
+            font-family: monospace;
+            z-index: 1000;
+            max-width: 250px;
+            pointer-events: none;
+        `;
+        
+        popup.innerHTML = `
+            <div><strong>Word:</strong> "${word.text}"</div>
+            <div><strong>Confidence:</strong> ${(word.confidence * 100).toFixed(1)}%</div>
+            <div><strong>Index:</strong> ${word.index}</div>
+            <div><strong>Bounds:</strong> ${word.boundingBox ? `${word.boundingBox.x1},${word.boundingBox.y1} to ${word.boundingBox.x2},${word.boundingBox.y2}` : 'N/A'}</div>
+        `;
+        
+        popup.style.left = event.clientX + 10 + 'px';
+        popup.style.top = event.clientY + 10 + 'px';
+        
+        document.body.appendChild(popup);
+        
+        setTimeout(() => {
+            if (popup.parentNode) {
+                popup.parentNode.removeChild(popup);
+            }
+        }, 3000);
+    }
+    
+    /**
+     * Bind event handlers
+     */
+    function bindEventHandlers() {
         document.getElementById('toggle-line-boxes').addEventListener('change', function(e) {
             state.showLineBoxes = e.target.checked;
             updateDisplay();
@@ -240,51 +761,30 @@
             updateDisplay();
         });
         
-        // Word click handlers for detailed info
-        document.querySelectorAll('w').forEach(word => {
-            word.addEventListener('click', function() {
-                showWordDetails(this);
-            });
+        document.getElementById('toggle-hover-controls').addEventListener('change', function(e) {
+            state.enableHoverControls = e.target.checked;
+            updateDisplay();
         });
         
-        // Keyboard shortcuts
-        document.addEventListener('keydown', function(e) {
-            if (e.ctrlKey || e.metaKey) {
-                switch(e.key) {
-                    case '1':
-                        e.preventDefault();
-                        toggleBackground();
-                        break;
-                    case '2':
-                        e.preventDefault();
-                        toggleLineBoxes();
-                        break;
-                    case '3':
-                        e.preventDefault();
-                        toggleWordBoxes();
-                        break;
-                    case '4':
-                        e.preventDefault();
-                        toggleText();
-                        break;
-                }
-            }
+        document.getElementById('toggle-svg-section').addEventListener('change', function(e) {
+            state.showSVGSection = e.target.checked;
+            updateDisplay();
+        });
+        
+        document.getElementById('toggle-svg-background').addEventListener('change', function(e) {
+            state.showSVGBackground = e.target.checked;
+            updateDisplay();
         });
     }
     
+    /**
+     * Update display based on current state
+     */
     function updateDisplay() {
         const section = document.querySelector('section.win11OneOcrPage');
-        const bgImage = document.querySelector('.background-image');
-        const content = document.querySelector('.ocrContent');
-        
         if (!section) return;
         
-        // Background image
-        if (bgImage) {
-            bgImage.style.display = state.showBackground ? 'block' : 'none';
-        }
-        
-        // Line boxes
+        // Line boxes (segments)
         document.querySelectorAll('segment').forEach(segment => {
             if (state.showLineBoxes) {
                 segment.classList.add('show-line-boxes');
@@ -306,141 +806,112 @@
         } else {
             section.classList.remove('hide-text');
         }
+        
+        // Hover controls
+        const pageCopyBtn = section.querySelector('button');
+        if (pageCopyBtn) {
+            pageCopyBtn.style.display = state.enableHoverControls ? 'block' : 'none';
+        }
+        
+        // SVG section visibility
+        const svgContainer = document.querySelector('.svg-content');
+        if (svgContainer) {
+            svgContainer.style.display = state.showSVGSection ? 'block' : 'none';
+        }
+        
+        // SVG layers
+        const svgBgLayer = document.getElementById('svg-background-layer');
+        if (svgBgLayer) {
+            if (state.showSVGBackground) {
+                svgBgLayer.classList.remove('hidden');
+            } else {
+                svgBgLayer.classList.add('hidden');
+            }
+        }
+        
+        const svgLineBoxes = document.getElementById('svg-line-boxes');
+        if (svgLineBoxes) {
+            if (state.showLineBoxes) {
+                svgLineBoxes.classList.remove('hidden');
+            } else {
+                svgLineBoxes.classList.add('hidden');
+            }
+        }
+        
+        const svgWordBoxes = document.getElementById('svg-word-boxes');
+        if (svgWordBoxes) {
+            if (state.showWordBoxes) {
+                svgWordBoxes.classList.remove('hidden');
+            } else {
+                svgWordBoxes.classList.add('hidden');
+            }
+        }
+        
+        const svgTextLayer = document.getElementById('svg-text-layer');
+        if (svgTextLayer) {
+            if (state.showText) {
+                svgTextLayer.classList.remove('hidden');
+            } else {
+                svgTextLayer.classList.add('hidden');
+            }
+        }
     }
     
     function updateStats() {
         const statsDiv = document.getElementById('ocr-stats');
-        if (statsDiv && window.ocrMetadata) {
-            const meta = window.ocrMetadata;
+        if (statsDiv && ocrData.metadata) {
+            const meta = ocrData.metadata;
             
-            // Clear existing content
-            while (statsDiv.firstChild) {
-                statsDiv.removeChild(statsDiv.firstChild);
-            }
-            
-            // Create stats elements
-            const line1 = document.createElement('div');
-            line1.textContent = `${meta.segments} lines, ${meta.words} words`;
-            
-            const line2 = document.createElement('div');
-            line2.textContent = `Avg confidence: ${(meta.avgConf * 100).toFixed(1)}%`;
-            
-            const line3 = document.createElement('div');
-            line3.textContent = `Page angle: ${meta.angle.toFixed(1)}°`;
-            
-            statsDiv.appendChild(line1);
-            statsDiv.appendChild(line2);
-            statsDiv.appendChild(line3);
+            statsDiv.innerHTML = `
+                <div>${meta.totalLines} lines, ${meta.totalWords} words</div>
+                <div>Avg confidence: ${(meta.averageConfidence * 100).toFixed(1)}%</div>
+                <div>Page angle: ${meta.angle.toFixed(1)}°</div>
+            `;
         }
     }
     
-    function showWordDetails(wordElement) {
-        const confidence = parseFloat(wordElement.getAttribute('p'));
-        const wordIndex = wordElement.getAttribute('i');
-        const boundingBox = wordElement.getAttribute('b');
-        const text = wordElement.textContent.trim();
+    /**
+     * Debug function to export SVG elements for a specific line to console
+     */
+    function exportLineSVGToConsole(lineIndex) {
+        console.log(`\n=== DEBUG: SVG Elements for Line ${lineIndex + 1} ===`);
         
-        // Create temporary detail popup
-        const popup = document.createElement('div');
-        popup.style.cssText = `
-            position: fixed;
-            background: rgba(0, 0, 0, 0.9);
-            color: white;
-            padding: 10px 15px;
-            border-radius: 5px;
-            font-size: 12px;
-            font-family: monospace;
-            z-index: 1000;
-            max-width: 200px;
-            pointer-events: none;
-        `;
+        const lineData = ocrData.lines[lineIndex];
+        if (!lineData) {
+            console.log(`No data for line ${lineIndex + 1}`);
+            return;
+        }
         
-        // Create content using DOM methods for XML compatibility
-        const line1 = document.createElement('div');
-        const strong1 = document.createElement('strong');
-        strong1.textContent = 'Word:';
-        line1.appendChild(strong1);
-        line1.appendChild(document.createTextNode(` "${text}"`));
+        console.log(`Line ${lineIndex + 1} has ${lineData.words.length} words:`);
         
-        const line2 = document.createElement('div');
-        const strong2 = document.createElement('strong');
-        strong2.textContent = 'Confidence:';
-        line2.appendChild(strong2);
-        line2.appendChild(document.createTextNode(` ${(confidence * 100).toFixed(1)}%`));
+        // Export word polygons
+        lineData.words.forEach((word, wordIndex) => {
+            if (!word.boundingBox) return;
+            
+            const bbox = word.boundingBox;
+            const confidence = word.confidence;
+            const confClass = getConfidenceClass(confidence);
+            
+            // Generate polygon points (matching our code)
+            const points = `${bbox.x1},${bbox.y1} ${bbox.x2},${bbox.y1} ${bbox.x2},${bbox.y2} ${bbox.x1},${bbox.y2}`;
+            
+            console.log(`Word ${wordIndex}: "${word.text}"`);
+            console.log(`  <polygon id="word-${lineIndex}-${wordIndex}" points="${points}" class="${confClass}" />`);
+            
+            // Generate text element
+            const boxHeight = Math.abs(bbox.y2 - bbox.y1);
+            const fontSize = Math.max(8, Math.min(boxHeight * 0.7, 24));
+            const textX = bbox.x1 + 2;
+            const textY = bbox.y2 - (boxHeight * 0.25);
+            
+            console.log(`  <text x="${textX.toFixed(1)}" y="${textY.toFixed(1)}" class="word-text" style="font-size: ${fontSize.toFixed(1)}px;" title="Confidence: ${(confidence * 100).toFixed(1)}%">${word.text}</text>`);
+            console.log(`  Confidence: ${(confidence * 100).toFixed(1)}% | BBox: ${bbox.x1},${bbox.y1},${bbox.x2},${bbox.y2}`);
+            console.log('');
+        });
         
-        const line3 = document.createElement('div');
-        const strong3 = document.createElement('strong');
-        strong3.textContent = 'Index:';
-        line3.appendChild(strong3);
-        line3.appendChild(document.createTextNode(` ${wordIndex}`));
-        
-        const line4 = document.createElement('div');
-        const strong4 = document.createElement('strong');
-        strong4.textContent = 'Bounds:';
-        line4.appendChild(strong4);
-        const boundsText = boundingBox ? boundingBox.split(',').map(n => parseFloat(n).toFixed(0)).join(', ') : 'N/A';
-        line4.appendChild(document.createTextNode(` ${boundsText}`));
-        
-        popup.appendChild(line1);
-        popup.appendChild(line2);
-        popup.appendChild(line3);
-        popup.appendChild(line4);
-        
-        // Position popup near the word
-        const rect = wordElement.getBoundingClientRect();
-        popup.style.left = (rect.left + window.scrollX) + 'px';
-        popup.style.top = (rect.bottom + window.scrollY + 5) + 'px';
-        
-        document.body.appendChild(popup);
-        
-        // Remove popup after 3 seconds
-        setTimeout(() => {
-            if (popup.parentNode) {
-                popup.parentNode.removeChild(popup);
-            }
-        }, 3000);
+        console.log('=== END DEBUG ===\n');
     }
     
-    // Public API functions
-    window.ocrControls = {
-        toggleBackground: function() {
-            state.showBackground = !state.showBackground;
-            document.getElementById('toggle-background').checked = state.showBackground;
-            updateDisplay();
-        },
-        
-        toggleLineBoxes: function() {
-            state.showLineBoxes = !state.showLineBoxes;
-            document.getElementById('toggle-line-boxes').checked = state.showLineBoxes;
-            updateDisplay();
-        },
-        
-        toggleWordBoxes: function() {
-            state.showWordBoxes = !state.showWordBoxes;
-            document.getElementById('toggle-word-boxes').checked = state.showWordBoxes;
-            updateDisplay();
-        },
-        
-        toggleText: function() {
-            state.showText = !state.showText;
-            document.getElementById('toggle-text').checked = state.showText;
-            updateDisplay();
-        },
-        
-        getState: function() {
-            return { ...state };
-        },
-        
-        setState: function(newState) {
-            Object.assign(state, newState);
-            updateDisplay();
-        }
-    };
-    
-    // Helper functions for direct toggle access
-    function toggleBackground() { window.ocrControls.toggleBackground(); }
-    function toggleLineBoxes() { window.ocrControls.toggleLineBoxes(); }
-    function toggleWordBoxes() { window.ocrControls.toggleWordBoxes(); }
-    function toggleText() { window.ocrControls.toggleText(); }
+    // Functions are now used directly via onclick handlers, no need for global exposure
     
 })();
