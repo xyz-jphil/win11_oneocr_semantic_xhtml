@@ -28,11 +28,12 @@
     // State management
     const state = {
         showLineBoxes: false,
-        showWordBoxes: false,
-        showText: true,
+        showWordBoxes: true,        // Show SVG word boxes by default
+        showXHTMLText: true,        // Show XHTML text by default
+        showSVGText: false,         // Hide SVG text by default
         enableHoverControls: true,
         showSVGSection: true,
-        showSVGBackground: false,
+        showSVGBackground: true,    // Show SVG background image by default
         initialized: false
     };
     
@@ -199,10 +200,13 @@
         controlPanel.appendChild(createControlGroup('toggle-line-boxes', 'Line Boxes', false));
         
         // Word Boxes Control
-        controlPanel.appendChild(createControlGroup('toggle-word-boxes', 'Word Boxes', false));
+        controlPanel.appendChild(createControlGroup('toggle-word-boxes', 'Word Boxes', true));
         
-        // Text Content Control
-        controlPanel.appendChild(createControlGroup('toggle-text', 'Text Content', true));
+        // XHTML Text Content Control
+        controlPanel.appendChild(createControlGroup('toggle-xhtml-text', 'Text Content (XHTML)', true));
+        
+        // SVG Text Content Control
+        controlPanel.appendChild(createControlGroup('toggle-svg-text', 'Text Content (SVG)', false));
         
         // Hover Controls Toggle
         controlPanel.appendChild(createControlGroup('toggle-hover-controls', 'Hover Controls', true));
@@ -211,7 +215,7 @@
         controlPanel.appendChild(createControlGroup('toggle-svg-section', 'SVG Section', true));
         
         // SVG Background Toggle
-        controlPanel.appendChild(createControlGroup('toggle-svg-background', 'SVG Background', false));
+        controlPanel.appendChild(createControlGroup('toggle-svg-background', 'SVG Background', true));
         
         // Confidence Legend
         const legend = document.createElement('div');
@@ -566,7 +570,7 @@
         const title = document.createElement('h3');
         title.textContent = 'Precise SVG Layout';
         title.style.cssText = 'margin: 0 0 15px 0; color: #666; font-size: 14px;';
-        svgContainer.appendChild(title);
+        //svgContainer.appendChild(title); // disabled for now
         
         // Generate SVG from virtual DOM
         const svgElement = generateSVGFromVirtualDOM();
@@ -756,8 +760,13 @@
             updateDisplay();
         });
         
-        document.getElementById('toggle-text').addEventListener('change', function(e) {
-            state.showText = e.target.checked;
+        document.getElementById('toggle-xhtml-text').addEventListener('change', function(e) {
+            state.showXHTMLText = e.target.checked;
+            updateDisplay();
+        });
+        
+        document.getElementById('toggle-svg-text').addEventListener('change', function(e) {
+            state.showSVGText = e.target.checked;
             updateDisplay();
         });
         
@@ -800,8 +809,8 @@
             section.classList.remove('show-word-boxes');
         }
         
-        // Text content
-        if (!state.showText) {
+        // XHTML Text content
+        if (!state.showXHTMLText) {
             section.classList.add('hide-text');
         } else {
             section.classList.remove('hide-text');
@@ -849,7 +858,7 @@
         
         const svgTextLayer = document.getElementById('svg-text-layer');
         if (svgTextLayer) {
-            if (state.showText) {
+            if (state.showSVGText) {
                 svgTextLayer.classList.remove('hidden');
             } else {
                 svgTextLayer.classList.add('hidden');
