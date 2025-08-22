@@ -40,7 +40,7 @@
     }
     
     function extractDocumentInfo() {
-        const section = document.querySelector('section');
+        const section = document.querySelector('section.win11OneOcrPage');
         if (section) {
             const filename = section.getAttribute('srcName');
             const words = section.getAttribute('ocrWordsCount');
@@ -169,7 +169,7 @@
     }
     
     function setupBackgroundImage() {
-        const section = document.querySelector('section');
+        const section = document.querySelector('section.win11OneOcrPage');
         if (!section || !CONFIG.backgroundImagePath) return;
         
         // Create background image element
@@ -177,18 +177,25 @@
         bgImage.className = 'background-image';
         bgImage.style.backgroundImage = `url('${CONFIG.backgroundImagePath}')`;
         
-        // Move existing children to content div instead of using innerHTML
-        const contentDiv = document.createElement('div');
-        contentDiv.className = 'ocr-content';
-        
-        // Move all existing children to the content div
-        while (section.firstChild) {
-            contentDiv.appendChild(section.firstChild);
+        // Check if ocrContent wrapper already exists
+        const existingContent = section.querySelector('.ocrContent');
+        if (!existingContent) {
+            // Move existing children to content div
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'ocrContent';
+            
+            // Move all existing children to the content div
+            while (section.firstChild) {
+                contentDiv.appendChild(section.firstChild);
+            }
+            
+            // Add background image and content div back to section
+            section.appendChild(bgImage);
+            section.appendChild(contentDiv);
+        } else {
+            // ocrContent already exists, just add background
+            section.insertBefore(bgImage, existingContent);
         }
-        
-        // Add background image and content div back to section
-        section.appendChild(bgImage);
-        section.appendChild(contentDiv);
     }
     
     function classifyWordsByConfidence() {
@@ -266,9 +273,9 @@
     }
     
     function updateDisplay() {
-        const section = document.querySelector('section');
+        const section = document.querySelector('section.win11OneOcrPage');
         const bgImage = document.querySelector('.background-image');
-        const content = document.querySelector('.ocr-content');
+        const content = document.querySelector('.ocrContent');
         
         if (!section) return;
         

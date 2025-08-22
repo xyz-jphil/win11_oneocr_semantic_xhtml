@@ -8,7 +8,7 @@ body {
 }
 
 /* Container for the OCR content */
-section {
+section.win11OneOcrPage {
     position: relative;
     max-width: 800px;
     margin: 0 auto;
@@ -35,7 +35,7 @@ section {
 }
 
 /* OCR content layer */
-.ocr-content {
+.ocrContent {
     position: relative;
     z-index: 2;
     padding: 20px;
@@ -46,10 +46,9 @@ section {
 segment {
     display: block;
     position: relative;
-    margin: 8px 0;
-    line-height: 1.4;
-    border: 2px dashed transparent;
-    padding: 2px 4px;
+    margin: 0.15em 0;
+    border: 1px dashed transparent;
+    padding: 0.05em 0;
     border-radius: 3px;
     transition: all 0.3s ease;
 }
@@ -73,6 +72,7 @@ w {
     border-radius: 2px;
     transition: all 0.2s ease;
     cursor: default;
+	line-height: 1.4;
 }
 
 /* Word confidence-based styling */
@@ -97,15 +97,15 @@ w {
 }
 
 /* Show word boxes when enabled */
-.show-word-boxes w.confidence-high {
+.win11OneOcrPage.show-word-boxes w.confidence-high {
     border-color: #00aa00;
 }
 
-.show-word-boxes w.confidence-med {
+.win11OneOcrPage.show-word-boxes w.confidence-med {
     border-color: #ffaa00;
 }
 
-.show-word-boxes w.confidence-low {
+.win11OneOcrPage.show-word-boxes w.confidence-low {
     border-color: #ff0000;
 }
 
@@ -116,7 +116,7 @@ w:hover {
 }
 
 /* Hide text when disabled */
-.hide-text w {
+.win11OneOcrPage.hide-text w {
     color: transparent;
     text-shadow: none;
 }
@@ -271,7 +271,7 @@ input:checked + .slider:before {
         padding: 10px;
     }
     
-    .ocr-content {
+    .ocrContent {
         padding: 15px;
     }
 }
