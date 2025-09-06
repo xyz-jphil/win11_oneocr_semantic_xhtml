@@ -16,6 +16,16 @@ import org.teavm.jso.dom.html.HTMLButtonElement;
 import org.teavm.jso.dom.html.HTMLElement;
 import org.teavm.jso.dom.html.HTMLInputElement;
 
+// Static imports for utility methods - organized in utilities sub-package
+import static xyz.jphil.win11_oneocr.xhtml_controls_js.utilities.AttributeParser.*;
+import static xyz.jphil.win11_oneocr.xhtml_controls_js.utilities.DomUtilities.*;
+import static xyz.jphil.win11_oneocr.xhtml_controls_js.utilities.OCRDataFactory.*;
+import static xyz.jphil.win11_oneocr.xhtml_controls_js.utilities.SvgUtilities.*;
+import xyz.jphil.win11_oneocr.xhtml_controls_js.utilities.UIElementFactory;
+import static xyz.jphil.win11_oneocr.xhtml_controls_js.utilities.UIElementFactory.*;
+import static xyz.jphil.win11_oneocr.xhtml_controls_js.utilities.NotificationUtilities.*;
+import static xyz.jphil.win11_oneocr.xhtml_controls_js.utilities.TextUtilities.*;
+
 
 /**
  * OCR XHTML Interactive Viewer - TeaVM Implementation
@@ -31,168 +41,26 @@ public class XHtmlOcrControls {
         console("*** TeaVM OCRViewer class loaded! JavaScript is executing! ***");
     }
     
-    // Configuration using records (JDK 14+)
-    public record Config(
-        ConfidenceThresholds confidenceThresholds
-    ) {
-        public static final Config DEFAULT = new Config(
-            new ConfidenceThresholds(0.8, 0.5)
-        );
-    }
     
-    public record ConfidenceThresholds(double high, double med) {}
-    
-    // OCR Data Model using records
-    public record BoundingBox(
-        double x1, double y1, double x2, double y2,
-        double x3, double y3, double x4, double y4
-    ) {
-        public double height() {
-            return Math.abs(y3 - y1);
-        }
-        
-        public double minX() {
-            return Math.min(x1, x4);
-        }
-        
-        public double minY() {
-            return Math.min(y1, y2);
-        }
-        
-        public String toPolygonPoints() {
-            // Ensure proper polygon closure by setting x4=x1 for proper rectangle (matching old JS logic)
-            return Math.round(x1*10)/10.0 + "," + Math.round(y1*10)/10.0 + " " +
-                   Math.round(x2*10)/10.0 + "," + Math.round(y2*10)/10.0 + " " +
-                   Math.round(x3*10)/10.0 + "," + Math.round(y3*10)/10.0 + " " +
-                   Math.round(x1*10)/10.0 + "," + Math.round(y4*10)/10.0; // x4=x1 for proper closure
-        }
-    }
-    
-    public record WordData(
-        String text,
-        double confidence,
-        int index,
-        Optional<BoundingBox> boundingBox
-    ) {}
-    
-    public record LineData(
-        int id,
-        Optional<BoundingBox> boundingBox,
-        List<WordData> words
-    ) {}
-    
-    public record Metadata(
-        String filename,
-        int imageWidth,
-        int imageHeight,
-        double angle,
-        double averageConfidence,
-        int totalWords,
-        int totalLines
-    ) {}
-    
-    public record OCRData(
-        Metadata metadata,
-        List<LineData> lines,
-        Optional<String> backgroundImagePath
-    ) {}
-    
-    // State management using records
-    public record ViewerState(
-        boolean showLineBoxes,
-        boolean showWordBoxes,
-        boolean showXHTMLText,
-        boolean showSVGText,
-        boolean enableHoverControls,
-        boolean showSVGSection,
-        boolean showSVGBackground,
-        boolean initialized
-    ) {
-        public static final ViewerState DEFAULT = new ViewerState(
-            false, true, true, false, true, true, true, false
-        );
-        
-        public ViewerState withInitialized(boolean initialized) {
-            return new ViewerState(showLineBoxes, showWordBoxes, showXHTMLText,
-                showSVGText, enableHoverControls, showSVGSection, showSVGBackground, initialized);
-        }
-        
-        public ViewerState withShowLineBoxes(boolean showLineBoxes) {
-            return new ViewerState(showLineBoxes, showWordBoxes, showXHTMLText,
-                showSVGText, enableHoverControls, showSVGSection, showSVGBackground, initialized);
-        }
-        
-        public ViewerState withShowWordBoxes(boolean showWordBoxes) {
-            return new ViewerState(showLineBoxes, showWordBoxes, showXHTMLText,
-                showSVGText, enableHoverControls, showSVGSection, showSVGBackground, initialized);
-        }
-        
-        public ViewerState withShowXHTMLText(boolean showXHTMLText) {
-            return new ViewerState(showLineBoxes, showWordBoxes, showXHTMLText,
-                showSVGText, enableHoverControls, showSVGSection, showSVGBackground, initialized);
-        }
-        
-        public ViewerState withShowSVGText(boolean showSVGText) {
-            return new ViewerState(showLineBoxes, showWordBoxes, showXHTMLText,
-                showSVGText, enableHoverControls, showSVGSection, showSVGBackground, initialized);
-        }
-        
-        public ViewerState withEnableHoverControls(boolean enableHoverControls) {
-            return new ViewerState(showLineBoxes, showWordBoxes, showXHTMLText,
-                showSVGText, enableHoverControls, showSVGSection, showSVGBackground, initialized);
-        }
-        
-        public ViewerState withShowSVGSection(boolean showSVGSection) {
-            return new ViewerState(showLineBoxes, showWordBoxes, showXHTMLText,
-                showSVGText, enableHoverControls, showSVGSection, showSVGBackground, initialized);
-        }
-        
-        public ViewerState withShowSVGBackground(boolean showSVGBackground) {
-            return new ViewerState(showLineBoxes, showWordBoxes, showXHTMLText,
-                showSVGText, enableHoverControls, showSVGSection, showSVGBackground, initialized);
-        }
-    }
-    
-    // Confidence classification using enhanced switch expressions (JDK 14+)
-    public enum ConfidenceLevel {
-        HIGH("confidence-high", "word-box-high"),
-        MEDIUM("confidence-med", "word-box-med"),
-        LOW("confidence-low", "word-box-low");
-        
-        private final String htmlClass;
-        private final String svgClass;
-        
-        ConfidenceLevel(String htmlClass, String svgClass) {
-            this.htmlClass = htmlClass;
-            this.svgClass = svgClass;
-        }
-        
-        public String htmlClass() { return htmlClass; }
-        public String svgClass() { return svgClass; }
-        
-        public static ConfidenceLevel fromConfidence(double confidence, Config config) {
-            return confidence >= config.confidenceThresholds().high() ? HIGH :
-                   confidence >= config.confidenceThresholds().med() ? MEDIUM : LOW;
-        }
-    }
-    
-    // Instance variables
+    // Instance variables - updated for multi-page support
     private final Config config = Config.DEFAULT;
-    private OCRData ocrData;
+    private final MultiPageManager pageManager = new MultiPageManager();
+    private final OCRPageProcessor pageProcessor = new OCRPageProcessor(config);
     private ViewerState state = ViewerState.DEFAULT;
     private final HTMLDocument document = Window.current().getDocument();
     private Timer hideControlsTimer;
     
-    /*@JSBody(script = "return typeof document !== 'undefined' && (document.readyState === 'complete' || document.readyState === 'interactive');")*/
-    private static /*native*/ boolean isDocumentReady(){
-        return true; // document is already loaded because we are using a loading script
-    }
+    // Multi-page state
+    private List<OCRData> allPagesData = new ArrayList<>();
+    private boolean isMultiPageDocument = false;
     
     public static void main(String[] args) {
         debug("main() called - starting TeaVM OCR Viewer");
         XHtmlOcrControls viewer = new XHtmlOcrControls();
         
-        if (isDocumentReady()) {
+        
+        if (true/*isDocumentReady()*/) { 
+            // document is already loaded because we are using a loading script
             debug("Document is ready, initializing immediately");
             viewer.initializeOCRViewer();
         } else {
@@ -206,114 +74,196 @@ public class XHtmlOcrControls {
     }
     
     public void initializeOCRViewer() {
-        debug("initializeOCRViewer() called");
+        debug("initializeOCRViewer() called - Multi-page OCR Viewer");
         if (state.initialized()) {
             debug("Already initialized, skipping");
             return;
         }
         
-        debug("Building virtual DOM from XHTML...");
-        ocrData = buildVirtualDOMFromXHTML();
+        // Detect document type
+        isMultiPageDocument = pageManager.isMultiPage();
+        debug("Document type: " + (isMultiPageDocument ? "Multi-page" : "Single-page"));
         
+        // Clean up any existing content
         debug("Cleaning up DOM...");
         cleanupDOM();
-        debug("Creating control panel...");
-        createControlPanel();
-        debug("Setting up HTML section...");
-        setupHTMLSection();
-        debug("Creating SVG section...");
-        createSVGSection();
+        
+        // Process all pages
+        debug("Processing pages...");
+        pageManager.processAllPages((pageElement, pageNumber, isMultiPage) -> {
+            var pageData = pageProcessor.processPage(pageElement, pageNumber, isMultiPage);
+            allPagesData.add(pageData);
+        });
+        
+        // Create document-level controls
+        debug("Creating document controls...");
+        createDocumentControls();
+        
+        // Create page-level SVG sections
+        debug("Creating SVG sections...");
+        createAllSVGSections();
+        
+        // Bind global event handlers
         debug("Binding event handlers...");
-        bindEventHandlers();
+        bindDocumentEventHandlers();
+        
+        // Update display
         debug("Updating display...");
         updateDisplay();
         
         state = state.withInitialized(true);
-        debug("OCR XHTML Viewer initialized with TeaVM - SUCCESS!");
+        debug("Multi-page OCR Viewer initialized successfully!");
+        debug("Processed " + allPagesData.size() + " pages");
         
-        // Debug export
-        debug("Exporting debug info for line 2...");
-        exportLineSVGToConsole(2);
+        // Debug export for first page
+        if (!allPagesData.isEmpty()) {
+            debug("Exporting debug info for first page...");
+            exportPageDebugInfo(0);
+        }
+        
         debug("initializeOCRViewer() completed");
     }
     
-    private OCRData buildVirtualDOMFromXHTML() {
-        debug("buildVirtualDOMFromXHTML() - looking for section.win11OneOcrPage");
-        var section = document.querySelector("section.win11OneOcrPage");
-        if (section == null) {
-            debug("ERROR: No section.win11OneOcrPage found! Creating empty OCR data.");
-            return createEmptyOCRData();
+    // Old single-page methods removed - now handled by OCRPageProcessor
+    
+    // New multi-page methods
+    
+    private void createDocumentControls() {
+        debug("Creating document-level control panel...");
+        
+        if (isMultiPageDocument) {
+            createMultiPageControlPanel();
+        } else {
+            createSinglePageControlPanel();
         }
-        debug("Found section.win11OneOcrPage element");
-        
-        // Extract metadata using enhanced pattern matching approach
-        var metadata = new Metadata(
-            Optional.ofNullable(section.getAttribute("srcName")).orElse("Unknown"),
-            parseIntAttribute(section, "imgWidth", 800),
-            parseIntAttribute(section, "imgHeight", 600),
-            parseDoubleAttribute(section, "angle", 0.0),
-            parseDoubleAttribute(section, "averageOcrConfidence", 0.0),
-            parseIntAttribute(section, "ocrWordsCount", 0),
-            parseIntAttribute(section, "ocrSegmentsCount", 0)
-        );
-        
-        // Extract lines using streams and modern Java features
-        var segments = document.querySelectorAll("segment");
-        var lines = IntStream.range(0, segments.getLength())
-            .mapToObj(i -> buildLineData(segments.get(i), i))
-            .toList(); // JDK 16+ - List.toList()
-        
-        debug("Virtual DOM built with " + lines.size() + " lines, " + 
-               metadata.totalWords() + " words, avg confidence: " + 
-               Math.round(metadata.averageConfidence() * 1000.0) / 10.0 + "%");
-        
-        return new OCRData(
-            metadata,
-            lines,
-            Optional.of(metadata.filename())
-        );
     }
     
-    private LineData buildLineData(Element segment, int lineIndex) {
-        var words = segment.querySelectorAll("w");
-        var wordList = IntStream.range(0, words.getLength())
-            .mapToObj(i -> {
-                var word = words.get(i);
-                return new WordData(
-                    word.getTextContent().trim(),
-                    parseDoubleAttribute(word, "p", 0.0),
-                    parseIntAttribute(word, "i", i),
-                    parseBoundingBox(word.getAttribute("b"))
-                );
-            })
-            .toList();
+    private void createMultiPageControlPanel() {
+        // Global controls for sticky control bar
+        var globalControls = List.of(
+            new UIElementFactory.ControlConfig("toggle-line-boxes", "Line Boxes", false),
+            new UIElementFactory.ControlConfig("toggle-word-boxes", "Word Boxes", true),
+            new UIElementFactory.ControlConfig("toggle-xhtml-text", "XHTML Text", true),
+            new UIElementFactory.ControlConfig("toggle-svg-text", "SVG Text", false),
+            new UIElementFactory.ControlConfig("toggle-hover-controls", "Hover Controls", true),
+            new UIElementFactory.ControlConfig("toggle-svg-section", "SVG Section", true),
+            new UIElementFactory.ControlConfig("toggle-svg-background", "SVG Background", true)
+        );
         
-        return new LineData(lineIndex, Optional.empty(), wordList);
+        // Create sticky control bar at top
+        var stickyControlBar = UIElementFactory.createStickyControlBar(globalControls);
+        document.getBody().insertBefore(stickyControlBar, document.getBody().getFirstChild());
+        
+        // Add document info to body (after control bar)
+        var docInfo = pageManager.getDocumentMetadata();
+        var infoPanel = (HTMLElement) document.createElement("div");
+        infoPanel.setClassName("document-info-panel");
+        infoPanel.setInnerHTML("<div style='padding: 8px 16px; background: #f8f9fa; border-bottom: 1px solid #dee2e6; font-size: 13px;'>" +
+                              "<strong>" + docInfo.pageCount() + " pages</strong> | " + 
+                              docInfo.totalWords() + " words | " + 
+                              Math.round(docInfo.averageConfidence() * 1000.0) / 10.0 + "% avg confidence</div>");
+        
+        // Insert info panel after control bar
+        var controlBar = document.getElementById("top-control-bar");
+        if (controlBar != null && controlBar.getNextSibling() != null) {
+            document.getBody().insertBefore(infoPanel, controlBar.getNextSibling());
+        } else {
+            document.getBody().appendChild(infoPanel);
+        }
     }
     
-    private Optional<BoundingBox> parseBoundingBox(String boundingBoxStr) {
-        if (boundingBoxStr == null || boundingBoxStr.isBlank()) return Optional.empty();
+    private void createSinglePageControlPanel() {
+        // Use same sticky control bar for single-page (works for both cases)
+        var globalControls = List.of(
+            new UIElementFactory.ControlConfig("toggle-line-boxes", "Line Boxes", false),
+            new UIElementFactory.ControlConfig("toggle-word-boxes", "Word Boxes", true),
+            new UIElementFactory.ControlConfig("toggle-xhtml-text", "XHTML Text", true),
+            new UIElementFactory.ControlConfig("toggle-svg-text", "SVG Text", false),
+            new UIElementFactory.ControlConfig("toggle-hover-controls", "Hover Controls", true),
+            new UIElementFactory.ControlConfig("toggle-svg-section", "SVG Section", true),
+            new UIElementFactory.ControlConfig("toggle-svg-background", "SVG Background", true)
+        );
         
-        try {
-            var coords = Arrays.stream(boundingBoxStr.split(","))
-                .mapToDouble(Double::parseDouble)
-                .toArray();
-                
-            return coords.length >= 8 ? 
-                Optional.of(new BoundingBox(coords[0], coords[1], coords[2], coords[3],
-                                          coords[4], coords[5], coords[6], coords[7])) :
-                Optional.empty();
-        } catch (NumberFormatException e) {
-            return Optional.empty();
+        var stickyControlBar = UIElementFactory.createStickyControlBar(globalControls);
+        document.getBody().insertBefore(stickyControlBar, document.getBody().getFirstChild());
+    }
+    
+    private void createAllSVGSections() {
+        debug("Creating SVG sections for all pages...");
+        
+        for (int i = 0; i < allPagesData.size(); i++) {
+            var pageData = allPagesData.get(i);
+            var pageElement = pageManager.getPage(i + 1);
+            
+            if (pageElement.isPresent()) {
+                createSVGSectionForPage(pageElement.get(), pageData, i + 1);
+            }
+        }
+    }
+    
+    private void createSVGSectionForPage(HTMLElement pageElement, OCRData pageData, int pageNumber) {
+        debug("Creating SVG section for page " + pageNumber);
+        
+        // Find the ocrContent element within this specific page
+        var ocrContent = pageElement.querySelector(".ocrContent");
+        if (ocrContent == null) {
+            debug("ERROR: Missing .ocrContent element for page " + pageNumber);
+            return;
+        }
+        
+        // Create SVG container for this specific page
+        var svgContainer = (HTMLElement) document.createElement("div");
+        svgContainer.setClassName("svg-content page-" + pageNumber);
+        svgContainer.setAttribute("data-page", String.valueOf(pageNumber));
+        
+        var containerStyle = """
+            position: relative;
+            margin-top: 20px;
+            border-top: 2px solid #ddd;
+            padding: 20px;
+            background: #fafafa;
+            overflow: auto;
+            max-width: 100%;
+            """;
+        svgContainer.getStyle().setCssText(containerStyle);
+        
+        // Add page number header for multi-page documents
+        if (isMultiPageDocument) {
+            var pageHeader = (HTMLElement) document.createElement("h3");
+            pageHeader.setTextContent("Page " + pageNumber + " - SVG Visualization");
+            pageHeader.getStyle().setCssText("margin-top: 0; color: #666;");
+            svgContainer.appendChild(pageHeader);
+        }
+        
+        // Generate SVG for this specific page data
+        var svg = generateSVGFromPageData(pageData);
+        svgContainer.appendChild(svg);
+        
+        // Insert after the ocrContent within this page
+        ocrContent.getParentNode().insertBefore(svgContainer, ocrContent.getNextSibling());
+        debug("SVG section created and inserted for page " + pageNumber);
+    }
+    
+    private void bindDocumentEventHandlers() {
+        debug("Binding document-level event handlers...");
+        bindEventHandlers(); // Use existing logic for now
+    }
+    
+    private void exportPageDebugInfo(int pageIndex) {
+        if (pageIndex < allPagesData.size()) {
+            var pageData = allPagesData.get(pageIndex);
+            debug("=== DEBUG: Page " + (pageIndex + 1) + " ===");
+            debug("Words: " + pageData.metadata().totalWords() + 
+                  ", Lines: " + pageData.metadata().totalLines() +
+                  ", Confidence: " + Math.round(pageData.metadata().averageConfidence() * 1000.0) / 10.0 + "%");
         }
     }
     
     private void createControlPanel() {
-        debug("Creating control panel...");
         var controlPanel = (HTMLElement) document.createElement("div");
         controlPanel.setClassName("control-panel");
         
-        // Create control elements using method references and lambdas
+        // Create control elements using static utility methods
         createHoverHint(controlPanel);
         createTitle(controlPanel, "OCR Display Controls");
         
@@ -342,65 +292,50 @@ public class XHtmlOcrControls {
         updateStats();
     }
     
-    private record ControlConfig(String id, String label, boolean defaultChecked) {}
+    // ControlConfig record moved to UIElementFactory - using static import
     
-    private HTMLElement createControlGroup(ControlConfig config) {
-        var group = (HTMLElement) document.createElement("div");
-        group.setClassName("control-group");
-        
-        var label = (HTMLElement) document.createElement("label");
-        label.setAttribute("for", config.id());
-        label.setTextContent(config.label());
-        
-        var toggleSwitch = createToggleSwitch(config.id(), config.defaultChecked());
-        
-        group.appendChild(label);
-        group.appendChild(toggleSwitch);
-        
-        return group;
-    }
-    
-    private HTMLElement createToggleSwitch(String id, boolean checked) {
-        var toggleSwitch = (HTMLElement) document.createElement("div");
-        toggleSwitch.setClassName("toggle-switch");
-        
-        var input = (HTMLInputElement) document.createElement("input");
-        input.setType("checkbox");
-        input.setId(id);
-        input.setChecked(checked);
-        
-        var slider = (HTMLElement) document.createElement("span");
-        slider.setClassName("slider");
-        
-        toggleSwitch.appendChild(input);
-        toggleSwitch.appendChild(slider);
-        
-        return toggleSwitch;
-    }
+    // UI creation methods moved to UIElementFactory - using static imports
     
     private void setupHTMLSection() {
-        var section = document.querySelector("section.win11OneOcrPage");
-        if (section == null) return;
+        // Process ALL pages - get all section elements
+        var sections = document.querySelectorAll("section.win11OneOcrPage");
+        debug("Setting up HTML sections for " + sections.getLength() + " pages");
         
-        // Apply confidence classes using streams and enhanced switch
-        ocrData.lines().forEach(this::applyConfidenceClasses);
-        
-        addCleanHoverControls();
-        addPageCopyButton();
-    }
-    
-    private void applyConfidenceClasses(LineData line) {
-        // Add line number to segment (required for CSS line number display)
-        var segmentElement = document.querySelector("segment:nth-child(" + (line.id() + 1) + ")");
-        if (segmentElement != null) {
-            segmentElement.setAttribute("data-line-number", String.valueOf(line.id() + 1));
-            debug("Added data-line-number=" + (line.id() + 1) + " to segment " + line.id());
+        for (int pageIndex = 0; pageIndex < sections.getLength(); pageIndex++) {
+            var pageSection = (HTMLElement) sections.get(pageIndex);
+            var pageNumber = pageIndex + 1;
+            
+            debug("Setting up HTML section for page " + pageNumber);
+            setupHTMLSectionForPage(pageSection, pageIndex, pageNumber);
         }
         
-        // Apply confidence classes to words
-        for (int index = 0; index < line.words.size(); index++) {
-            var word = line.words.get(index);
-            var wordElement = document.querySelector(
+        debug("HTML section setup completed for all pages");
+    }
+    
+    private void setupHTMLSectionForPage(HTMLElement pageSection, int pageIndex, int pageNumber) {
+        // Apply confidence classes for this specific page
+        if (pageIndex < allPagesData.size()) {
+            var pageData = allPagesData.get(pageIndex);
+            pageData.lines().forEach(line -> applyConfidenceClassesForPage(line, pageSection));
+        }
+        
+        // Add hover controls for this page
+        addCleanHoverControlsForPage(pageSection, pageIndex, pageNumber);
+    }
+    
+    
+    private void applyConfidenceClassesForPage(LineData line, HTMLElement pageSection) {
+        // Add line number to segment within this specific page (FIXED: Page-scoped selector)
+        var segmentElement = pageSection.querySelector("segment:nth-child(" + (line.id() + 1) + ")");
+        if (segmentElement != null) {
+            segmentElement.setAttribute("data-line-number", String.valueOf(line.id() + 1));
+            debug("Added data-line-number=" + (line.id() + 1) + " to segment " + line.id() + " on page");
+        }
+        
+        // Apply confidence classes to words within this specific page (FIXED: Page-scoped selectors)
+        for (int index = 0; index < line.words().size(); index++) {
+            var word = line.words().get(index);
+            var wordElement = pageSection.querySelector(
                 "segment:nth-child(" + (line.id() + 1) + ") w:nth-child(" + (index + 1) + ")");
             
             if (wordElement != null) {
@@ -413,10 +348,22 @@ public class XHtmlOcrControls {
     }
     
     private void addCleanHoverControls() {
-        var section = document.querySelector("section.win11OneOcrPage");
-        if (section == null) return;
+        var sections = document.querySelectorAll("section.win11OneOcrPage");
+        debug("Adding hover controls for " + sections.getLength() + " pages");
         
-        var segments = document.querySelectorAll("segment");
+        for (int pageIndex = 0; pageIndex < sections.getLength(); pageIndex++) {
+            var pageSection = (HTMLElement) sections.get(pageIndex);
+            var pageNumber = pageIndex + 1;
+            
+            debug("Adding hover controls for page " + pageNumber);
+            addCleanHoverControlsForPage(pageSection, pageIndex, pageNumber);
+        }
+    }
+    
+    private void addCleanHoverControlsForPage(HTMLElement pageSection, int pageIndex, int pageNumber) {
+        var segments = pageSection.querySelectorAll("segment");
+        debug("Adding hover controls to " + segments.getLength() + " segments in page " + pageNumber);
+        
         IntStream.range(0, segments.getLength())
             .forEach(i -> addHoverControlsToSegment((HTMLElement)segments.get(i), i));
     }
@@ -436,7 +383,9 @@ public class XHtmlOcrControls {
     private void showLineControls(MouseEvent event, int lineIndex, HTMLElement segment) {
         hideControls();
         
-        if (lineIndex >= ocrData.lines().size()) return;
+        // For single page, use first page data
+        var currentPageData = !allPagesData.isEmpty() ? allPagesData.get(0) : createEmptyOCRData();
+        if (lineIndex >= currentPageData.lines().size()) return;
         
         var controls = createFloatingControls();
         var copyButton = createCopyButton(lineIndex);
@@ -472,27 +421,19 @@ public class XHtmlOcrControls {
         return copyButton;
     }
     
+    // Text extraction and clipboard methods moved to TextUtilities - using static imports
+    
     private void copyLineText(int lineIndex) {
-        if (lineIndex >= ocrData.lines().size()) return;
-        
-        var line = ocrData.lines().get(lineIndex);
-        var text = line.words().stream()
-            .map(WordData::text)
-            .collect(java.util.stream.Collectors.joining(" "));
-            
-        copyToClipboardSimple(text);
-        showNotification("Copied to clipboard!");
+        // For single page, use first page data
+        var currentPageData = !allPagesData.isEmpty() ? allPagesData.get(0) : createEmptyOCRData();
+        if (lineIndex >= currentPageData.lines().size()) return;
+        copyLineTextWithNotification(currentPageData.lines().get(lineIndex));
     }
     
     private void copyPageText() {
-        var allText = ocrData.lines().stream()
-            .map(line -> line.words().stream()
-                .map(WordData::text)
-                .collect(java.util.stream.Collectors.joining(" ")))
-            .collect(java.util.stream.Collectors.joining("\n"));
-            
-        copyToClipboardSimple(allText);
-        showNotification("Copied to clipboard!");
+        // For single page, use first page data
+        var currentPageData = !allPagesData.isEmpty() ? allPagesData.get(0) : createEmptyOCRData();
+        copyPageTextWithNotification(currentPageData.lines());
     }
     
     @JSBody(params = {"text"}, script = """
@@ -539,7 +480,9 @@ public class XHtmlOcrControls {
     }
     
     private HTMLElement generateSVGFromVirtualDOM() {
-        var metadata = ocrData.metadata();
+        // For single page, use first page data
+        var currentPageData = !allPagesData.isEmpty() ? allPagesData.get(0) : createEmptyOCRData();
+        var metadata = currentPageData.metadata();
         var svg = (HTMLElement)document.createElementNS("http://www.w3.org/2000/svg", "svg");
         
         svg.setAttribute("width", String.valueOf(metadata.imageWidth()));
@@ -558,6 +501,30 @@ public class XHtmlOcrControls {
         addSVGStyles(svg);
         addBackgroundLayer(svg);
         addWordLayers(svg);
+        
+        return svg;
+    }
+    
+    private HTMLElement generateSVGFromPageData(OCRData pageData) {
+        var metadata = pageData.metadata();
+        var svg = (HTMLElement)document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        
+        svg.setAttribute("width", String.valueOf(metadata.imageWidth()));
+        svg.setAttribute("height", String.valueOf(metadata.imageHeight()));
+        svg.setAttribute("viewBox", "0 0 " + metadata.imageWidth() + " " + metadata.imageHeight());
+        
+        var svgStyle = """
+            border: 1px solid #ccc;
+            background: white;
+            width: 100%;
+            height: auto;
+            """;
+        svg.getStyle().setCssText(svgStyle);
+        
+        // Add SVG content using method chaining
+        addSVGStyles(svg);
+        addBackgroundLayer(svg, pageData);
+        addWordLayers(svg, pageData);
         
         return svg;
     }
@@ -621,49 +588,52 @@ public class XHtmlOcrControls {
         debug("updateDisplay() called with state: showLineBoxes=" + state.showLineBoxes() + 
               ", showWordBoxes=" + state.showWordBoxes() + 
               ", showXHTMLText=" + state.showXHTMLText() + ", showSVGSection=" + state.showSVGSection());
-        var section = document.querySelector("section.win11OneOcrPage");
-        if (section == null) {
-            debug("ERROR: section.win11OneOcrPage not found in updateDisplay()");
-            return;
+        
+        // Update ALL pages - get all section elements
+        var sections = document.querySelectorAll("section.win11OneOcrPage");
+        debug("Found " + sections.getLength() + " page sections to update");
+        
+        for (int pageIndex = 0; pageIndex < sections.getLength(); pageIndex++) {
+            var section = (HTMLElement) sections.get(pageIndex);
+            updateDisplayForPage(section, pageIndex + 1);
         }
         
-        // Update line boxes - add/remove show-line-boxes class on each segment (matching JavaScript)
-        var segments = document.querySelectorAll("segment");
+        debug("updateDisplay() completed for all pages");
+    }
+    
+    private void updateDisplayForPage(HTMLElement pageSection, int pageNumber) {
+        debug("Updating display for page " + pageNumber);
+        
+        // Update line boxes within this specific page
+        var segments = pageSection.querySelectorAll("segment");
         for (int i = 0; i < segments.getLength(); i++) {
             var segment = (HTMLElement) segments.get(i);
             updateElementVisibility(segment, state.showLineBoxes(), "show-line-boxes");
         }
-        debug("Updated line boxes visibility on " + segments.getLength() + " segments: " + state.showLineBoxes());
+        debug("Updated " + segments.getLength() + " segments on page " + pageNumber);
         
-        // Update display using pattern matching-like approach with switch expressions
-        updateElementVisibility(section, state.showWordBoxes(), "show-word-boxes");
-        updateElementVisibility(section, !state.showXHTMLText(), "hide-text");
+        // Update page-level display options
+        updateElementVisibility(pageSection, state.showWordBoxes(), "show-word-boxes");
+        updateElementVisibility(pageSection, !state.showXHTMLText(), "hide-text");
         
-        // Update SVG layers
-        updateSVGLayerVisibility("svg-background-layer", state.showSVGBackground());
-        updateSVGLayerVisibility("svg-line-boxes", state.showLineBoxes());
-        updateSVGLayerVisibility("svg-word-boxes", state.showWordBoxes());
-        updateSVGLayerVisibility("svg-text-layer", state.showSVGText());
+        // Update SVG layers within this page
+        updateSVGLayerVisibilityForPage(pageSection, "svg-background-layer", state.showSVGBackground());
+        updateSVGLayerVisibilityForPage(pageSection, "svg-line-boxes", state.showLineBoxes());
+        updateSVGLayerVisibilityForPage(pageSection, "svg-word-boxes", state.showWordBoxes());
+        updateSVGLayerVisibilityForPage(pageSection, "svg-text-layer", state.showSVGText());
         
-        // Update SVG section visibility
-        var svgContainer = document.querySelector(".svg-content");
+        // Update SVG section visibility for this page
+        var svgContainer = pageSection.querySelector(".svg-content");
         if (svgContainer != null) {
             String displayValue = state.showSVGSection() ? "block" : "none";
             ((HTMLElement) svgContainer).getStyle().setProperty("display", displayValue);
-            debug("SVG section visibility set to: " + displayValue);
+            debug("Page " + pageNumber + " SVG section visibility set to: " + displayValue);
         } else {
-            debug("WARNING: .svg-content not found for visibility update");
+            debug("WARNING: No .svg-content found for page " + pageNumber);
         }
-        debug("updateDisplay() completed");
     }
     
-    private void updateElementVisibility(HTMLElement element, boolean condition, String className) {
-        if (condition) {
-            element.getClassList().add(className);
-        } else {
-            element.getClassList().remove(className);
-        }
-    }
+    // updateElementVisibility moved to DomUtilities - using static import
     
     private void updateSVGLayerVisibility(String id, boolean visible) {
         var layer = document.getElementById(id);
@@ -676,15 +646,28 @@ public class XHtmlOcrControls {
         }
     }
     
+    private void updateSVGLayerVisibilityForPage(HTMLElement pageSection, String layerId, boolean visible) {
+        var layer = pageSection.querySelector("#" + layerId);
+        if (layer != null) {
+            if (visible) {
+                ((HTMLElement) layer).getClassList().remove("hidden");
+            } else {
+                ((HTMLElement) layer).getClassList().add("hidden");
+            }
+        }
+    }
+    
     private void exportLineSVGToConsole(int lineIndex) {
         console("\n=== DEBUG: SVG Elements for Line " + (lineIndex + 1) + " ===");
         
-        if (lineIndex >= ocrData.lines().size()) {
+        // For single page, use first page data
+        var currentPageData = !allPagesData.isEmpty() ? allPagesData.get(0) : createEmptyOCRData();
+        if (lineIndex >= currentPageData.lines().size()) {
             console("No data for line " + (lineIndex + 1));
             return;
         }
         
-        var line = ocrData.lines().get(lineIndex);
+        var line = currentPageData.lines().get(lineIndex);
         console("Line " + (lineIndex + 1) + " has " + line.words().size() + " words:");
         
         for (int i = 0; i < line.words().size(); i++) {
@@ -706,32 +689,7 @@ public class XHtmlOcrControls {
         console("=== END DEBUG ===\n");
     }
     
-    // Utility methods
-    private int parseIntAttribute(Element element, String attr, int defaultValue) {
-        try {
-            var value = element.getAttribute(attr);
-            return value != null ? Integer.parseInt(value) : defaultValue;
-        } catch (NumberFormatException e) {
-            return defaultValue;
-        }
-    }
-    
-    private double parseDoubleAttribute(Element element, String attr, double defaultValue) {
-        try {
-            var value = element.getAttribute(attr);
-            return value != null ? Double.parseDouble(value) : defaultValue;
-        } catch (NumberFormatException e) {
-            return defaultValue;
-        }
-    }
-    
-    private OCRData createEmptyOCRData() {
-        return new OCRData(
-            new Metadata("", 800, 600, 0.0, 0.0, 0, 0),
-            List.of(),
-            Optional.empty()
-        );
-    }
+    // Utility methods moved to static utility classes - using static imports
     
     //@JSBody(params = {"message"}, script = "console.log(message);")
     private static /*native*/ void console(String message){
@@ -776,75 +734,15 @@ public class XHtmlOcrControls {
     
     // Complete helper method implementations
     
-    private void createHoverHint(HTMLElement controlPanel) {
-        var hoverHint = (HTMLElement) document.createElement("div");
-        hoverHint.setClassName("hover-hint");
-        hoverHint.setTextContent("Hover for controls...");
-        controlPanel.appendChild(hoverHint);
-    }
-    
-    private void createTitle(HTMLElement controlPanel, String titleText) {
-        var title = (HTMLElement) document.createElement("h3");
-        title.setTextContent(titleText);
-        controlPanel.appendChild(title);
-    }
-    
-    private HTMLElement createConfidenceLegend() {
-        var legend = (HTMLElement) document.createElement("div");
-        legend.setClassName("confidence-legend");
-        
-        var legendTitle = (HTMLElement) document.createElement("h4");
-        legendTitle.setTextContent("Confidence Legend");
-        legend.appendChild(legendTitle);
-        
-        // Create legend items using modern Java features
-        var legendItems = List.of(
-            new LegendItemConfig("legend-high", "High (≥80%)"),
-            new LegendItemConfig("legend-med", "Medium (50-79%)"),
-            new LegendItemConfig("legend-low", "Low (<50%)")
-        );
-        
-        legendItems.stream()
-            .map(this::createLegendItem)
-            .forEach(legend::appendChild);
-        
-        return legend;
-    }
-    
-    private record LegendItemConfig(String colorClass, String text) {}
-    
-    private HTMLElement createLegendItem(LegendItemConfig config) {
-        var item = (HTMLElement) document.createElement("div");
-        item.setClassName("legend-item");
-        
-        var color = (HTMLElement) document.createElement("div");
-        color.setClassName("legend-color " + config.colorClass());
-        
-        var span = (HTMLElement) document.createElement("span");
-        span.setTextContent(config.text());
-        
-        item.appendChild(color);
-        item.appendChild(span);
-        
-        return item;
-    }
-    
-    private HTMLElement createStatsContainer() {
-        var stats = (HTMLElement) document.createElement("div");
-        stats.setClassName("stats");
-        
-        var statsDiv = (HTMLElement) document.createElement("div");
-        statsDiv.setId("ocr-stats");
-        stats.appendChild(statsDiv);
-        
-        return stats;
-    }
+    // UI creation methods moved to UIElementFactory - using static imports
     
     private void updateStats() {
         var statsDiv = document.getElementById("ocr-stats");
-        if (statsDiv == null || ocrData == null) return;
+        if (statsDiv == null || allPagesData.isEmpty()) return;
         
-        var meta = ocrData.metadata();
+        // For single page, use first page data
+        var currentPageData = allPagesData.get(0);
+        var meta = currentPageData.metadata();
         var statsHtml = "<div>" + meta.totalLines() + " lines, " + meta.totalWords() + " words</div>" +
                         "<div>Avg confidence: " + Math.round(meta.averageConfidence() * 1000.0) / 10.0 + "%</div>" +
                         "<div>Page angle: " + Math.round(meta.angle() * 10.0) / 10.0 + "°</div>";
@@ -852,47 +750,7 @@ public class XHtmlOcrControls {
         ((HTMLElement) statsDiv).setInnerHTML(statsHtml);
     }
     
-    private HTMLElement createFloatingControls() {
-        var controls = (HTMLElement) document.createElement("div");
-        controls.setId("floating-controls");
-        
-        var controlsStyle = """
-            position: absolute;
-            background: rgba(0, 0, 0, 0.9);
-            color: white;
-            padding: 5px 10px;
-            border-radius: 4px;
-            font-size: 11px;
-            z-index: 1000;
-            white-space: nowrap;
-            pointer-events: auto;
-            """;
-        controls.getStyle().setCssText(controlsStyle);
-        
-        return controls;
-    }
-    
-    private void positionControlsWithinElement(HTMLElement controls, HTMLElement element, String type) {
-        var rect = element.getBoundingClientRect();
-        var scrollLeft = Window.current().getScreenX();
-        var scrollTop = Window.current().getScreenY();
-        
-        switch (type) {
-            case "line" -> {
-                // Position copy button at right edge, centered vertically
-                var x = rect.getRight() + scrollLeft - 25;
-                var y = rect.getTop() + scrollTop + (rect.getHeight() / 2) - 10;
-                
-                controls.getStyle().setProperty("left", x + "px");
-                controls.getStyle().setProperty("top", y + "px");
-            }
-            default -> {
-                // Default positioning
-                controls.getStyle().setProperty("left", "10px");
-                controls.getStyle().setProperty("top", "10px");
-            }
-        }
-    }
+    // UI positioning methods moved to NotificationUtilities - using static imports
     
     private void addPageCopyButton() {
         var section = document.querySelector("section.win11OneOcrPage");
@@ -937,29 +795,12 @@ public class XHtmlOcrControls {
         removeAllFromDocument(".background-image");
     }
     
-    private void removeElement(Element element) {
-        if (element != null && element.getParentNode() != null) {
-            element.getParentNode().removeChild(element);
-        }
-    }
-    
-    private void removeFromDocument(String query){
-        var element = document.querySelector(query);
-        if (element != null) {
-            removeElement(element); //element.remove();
-        }
-    }
-    
-    private void removeAllFromDocument(String query){
-        var elements = document.querySelectorAll(query);
-        for (int i = 0; i < elements.getLength(); i++) {
-            var element = elements.item(i);
-            removeElement(element); //Element::remove
-        }
-    }
+    // DOM manipulation methods moved to DomUtilities - using static imports with global document
     
     private Optional<Element> addBackgroundLayer(Element svg) {
-        ocrData.backgroundImagePath().ifPresent(imagePath -> {
+        // For single page, use first page data
+        var currentPageData = !allPagesData.isEmpty() ? allPagesData.get(0) : createEmptyOCRData();
+        currentPageData.backgroundImagePath().ifPresent(imagePath -> {
             var bgGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
             bgGroup.setAttribute("id", "svg-background-layer");
             bgGroup.setAttribute("class", "svg-layer hidden");
@@ -968,8 +809,31 @@ public class XHtmlOcrControls {
             bgImage.setAttribute("href", imagePath);
             bgImage.setAttribute("x", "0");
             bgImage.setAttribute("y", "0");
-            bgImage.setAttribute("width", String.valueOf(ocrData.metadata().imageWidth()));
-            bgImage.setAttribute("height", String.valueOf(ocrData.metadata().imageHeight()));
+            bgImage.setAttribute("width", String.valueOf(currentPageData.metadata().imageWidth()));
+            bgImage.setAttribute("height", String.valueOf(currentPageData.metadata().imageHeight()));
+            bgImage.setAttribute("preserveAspectRatio", "none");
+            bgImage.setAttribute("opacity", "1.0");
+            
+            bgGroup.appendChild(bgImage);
+            svg.appendChild(bgGroup);
+        });
+        
+        return Optional.of(svg);
+    }
+    
+    // Overloaded method that accepts specific page data
+    private Optional<Element> addBackgroundLayer(Element svg, OCRData pageData) {
+        pageData.backgroundImagePath().ifPresent(imagePath -> {
+            var bgGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            bgGroup.setAttribute("id", "svg-background-layer");
+            bgGroup.setAttribute("class", "svg-layer hidden");
+            
+            var bgImage = document.createElementNS("http://www.w3.org/2000/svg", "image");
+            bgImage.setAttribute("href", imagePath);
+            bgImage.setAttribute("x", "0");
+            bgImage.setAttribute("y", "0");
+            bgImage.setAttribute("width", String.valueOf(pageData.metadata().imageWidth()));
+            bgImage.setAttribute("height", String.valueOf(pageData.metadata().imageHeight()));
             bgImage.setAttribute("preserveAspectRatio", "none");
             bgImage.setAttribute("opacity", "1.0");
             
@@ -981,7 +845,9 @@ public class XHtmlOcrControls {
     }
     
     private Optional<Element> addWordLayers(Element svg) {
-        var metadata = ocrData.metadata();
+        // For single page, use first page data
+        var currentPageData = !allPagesData.isEmpty() ? allPagesData.get(0) : createEmptyOCRData();
+        var metadata = currentPageData.metadata();
         
         // Create layer groups
         var lineBoxGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
@@ -997,7 +863,38 @@ public class XHtmlOcrControls {
         textGroup.setAttribute("class", "svg-layer");
         
         // Process words using streams and modern Java features
-        ocrData.lines().stream()
+        currentPageData.lines().stream()
+            .flatMap(line -> IntStream.range(0, line.words().size())
+                .mapToObj(wordIndex -> new WordWithPosition(line, wordIndex, line.words().get(wordIndex))))
+            .filter(wp -> wp.word().boundingBox().isPresent())
+            .forEach(wp -> addWordToSVG(wp, wordBoxGroup, textGroup));
+        
+        svg.appendChild(lineBoxGroup);
+        svg.appendChild(wordBoxGroup);
+        svg.appendChild(textGroup);
+        
+        return Optional.of(svg);
+    }
+    
+    // Overloaded method that accepts specific page data
+    private Optional<Element> addWordLayers(Element svg, OCRData pageData) {
+        var metadata = pageData.metadata();
+        
+        // Create layer groups
+        var lineBoxGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        lineBoxGroup.setAttribute("id", "svg-line-boxes");
+        lineBoxGroup.setAttribute("class", "svg-layer hidden");
+        
+        var wordBoxGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        wordBoxGroup.setAttribute("id", "svg-word-boxes");
+        wordBoxGroup.setAttribute("class", "svg-layer hidden");
+        
+        var textGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        textGroup.setAttribute("id", "svg-text-layer");
+        textGroup.setAttribute("class", "svg-layer");
+        
+        // Process words using streams and modern Java features
+        pageData.lines().stream()
             .flatMap(line -> IntStream.range(0, line.words().size())
                 .mapToObj(wordIndex -> new WordWithPosition(line, wordIndex, line.words().get(wordIndex))))
             .filter(wp -> wp.word().boundingBox().isPresent())
@@ -1038,121 +935,10 @@ public class XHtmlOcrControls {
         textGroup.appendChild(text);
     }
     
-    private Element createSVGTextElement(WordData word, BoundingBox bbox, int lineId, int wordIndex) {
-        var boxHeight = bbox.height();
-        var fontSize = Math.max(8, Math.min(boxHeight * 0.7, 24));
-        var textX = bbox.minX() + 2;
-        var textY = bbox.minY() + (boxHeight * 0.75);
-        
-        var text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-        text.setAttribute("x", String.valueOf(Math.round(textX*10)/10.0));
-        text.setAttribute("y", String.valueOf(Math.round(textY*10)/10.0));
-        text.setAttribute("class", "word-text");
-        text.setAttribute("style", "font-size: " + Math.round(fontSize*10)/10.0 + "px;");
-        text.setAttribute("title", "Confidence: " + Math.round(word.confidence() * 1000)/10.0 + "%");
-        text.setTextContent(word.text());
-        
-        return text;
-    }
+    // createSVGTextElement moved to SvgUtilities - using static import with global document
     
-    private void showSVGWordDetails(WordData word, MouseEvent event) {
-        var popup = (HTMLElement) document.createElement("div");
-        
-        var popupStyle = """
-            position: fixed;
-            background: rgba(0, 0, 0, 0.9);
-            color: white;
-            padding: 10px 15px;
-            border-radius: 5px;
-            font-size: 12px;
-            font-family: monospace;
-            z-index: 1000;
-            max-width: 250px;
-            pointer-events: none;
-            """;
-        popup.getStyle().setCssText(popupStyle);
-        
-        var popupContent = word.boundingBox()
-            .map(bbox -> "<div><strong>Word:</strong> \"" + word.text() + "\"</div>" +
-                "<div><strong>Confidence:</strong> " + Math.round(word.confidence() * 1000.0) / 10.0 + "%</div>" +
-                "<div><strong>Index:</strong> " + word.index() + "</div>" +
-                "<div><strong>Bounds:</strong> " + Math.round(bbox.x1() * 10.0) / 10.0 + "," + Math.round(bbox.y1() * 10.0) / 10.0 + " to " + Math.round(bbox.x2() * 10.0) / 10.0 + "," + Math.round(bbox.y2() * 10.0) / 10.0 + "</div>")
-            .orElse("<div><strong>Word:</strong> \"" + word.text() + "\"</div>" +
-                "<div><strong>Confidence:</strong> " + Math.round(word.confidence() * 1000.0) / 10.0 + "%</div>" +
-                "<div><strong>Index:</strong> " + word.index() + "</div>" +
-                "<div><strong>Bounds:</strong> N/A</div>");
-        
-        popup.setInnerHTML(popupContent);
-        
-        popup.getStyle().setProperty("left", (event.getClientX() + 10) + "px");
-        popup.getStyle().setProperty("top", (event.getClientY() + 10) + "px");
-        
-        document.getBody().appendChild(popup);
-        
-        // Auto-remove popup after 3 seconds
-        var timer = new Timer();
-        timer.schedule(new TimerTask() {
-            @Override
-            public void run() {
-                if (popup.getParentNode() != null) {
-                    removeElement(popup); //popup.remove();
-                }
-            }
-        }, 3000);
-    }
+    // Notification and popup methods moved to NotificationUtilities - using static imports
+    // Clipboard methods moved to TextUtilities - using static imports
     
-    private void showNotification(String message) {
-        var notification = (HTMLElement) document.createElement("div");
-        
-        var notificationStyle = """
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 10px 20px;
-            border-radius: 4px;
-            z-index: 1000;
-            font-size: 12px;
-            """;
-        notification.getStyle().setCssText(notificationStyle);
-        notification.setTextContent(message);
-        
-        document.getBody().appendChild(notification);
-        
-        var timer = new Timer();
-        timer.schedule(new TimerTask() {
-            @Override
-            public void run() {
-                if (notification.getParentNode() != null) {
-                    removeElement(notification); 
-                    //notification.remove();
-                }
-            }
-        }, 2000);
-    }
-    
-    @JSBody(params = {"text"}, script = """
-        navigator.clipboard.writeText(text).then(function() {
-            console.log('Copied to clipboard!');
-        }).catch(function(err) {
-            console.error('Failed to copy text: ', err);
-        });
-        """)
-    private static native void copyToClipboardSimple(String text);
-    
-    // Enhanced element querying with null safety
-    private Optional<Element> queryOptional(String selector) {
-        
-        return Optional.ofNullable(document.querySelector(selector));
-    }
-    
-    private List<HTMLElement> queryAll(String selector) {
-        var nodeList = document.querySelectorAll(selector);
-        return IntStream.range(0, nodeList.getLength())
-            .mapToObj(i->(HTMLElement)nodeList.item(i))
-            //.mapToObj(nodeList::get) //type issue
-            .toList();
-    }
+    // Enhanced element querying moved to DomUtilities - using static imports with global document
 }
