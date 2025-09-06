@@ -154,7 +154,8 @@ public final class UIElementFactory {
      * Create compact control group for horizontal layout in control bar.
      */
     private static HTMLElement createCompactControlGroup(ControlConfig config) {
-        var group = (HTMLElement) getDocument().createElement("div");
+        var group = (HTMLElement) getDocument().createElement("label");
+        group.setAttribute("for", config.id());
         group.setClassName("compact-control-group");
         
         var groupStyle = "display: flex; " +
@@ -163,17 +164,18 @@ public final class UIElementFactory {
                         "padding: 2px 6px; " +
                         "border-radius: 4px; " +
                         "background: rgba(255,255,255,0.1); " +
-                        "transition: background 0.2s ease;";
+                        "transition: background 0.2s ease; " +
+                        "cursor: pointer; " +
+                        "user-select: none;";
         group.getStyle().setCssText(groupStyle);
         
-        var label = (HTMLElement) getDocument().createElement("label");
-        label.setAttribute("for", config.id());
-        label.setTextContent(config.label());
-        label.getStyle().setCssText("font-size: 12px; cursor: pointer; user-select: none;");
+        var labelText = (HTMLElement) getDocument().createElement("span");
+        labelText.setTextContent(config.label());
+        labelText.getStyle().setCssText("font-size: 12px;");
         
         var toggle = createCompactToggleSwitch(config.id(), config.defaultChecked());
         
-        group.appendChild(label);
+        group.appendChild(labelText);
         group.appendChild(toggle);
         
         // Hover effect
@@ -228,6 +230,18 @@ public final class UIElementFactory {
         
         toggleSwitch.appendChild(input);
         toggleSwitch.appendChild(slider);
+        
+        // Add change event listener to update visual state when input changes
+        input.addEventListener("change", evt -> {
+            boolean isChecked = input.isChecked();
+            if (isChecked) {
+                toggleSwitch.getStyle().setProperty("background", "#3498db");
+                slider.getStyle().setProperty("transform", "translateX(16px)");
+            } else {
+                toggleSwitch.getStyle().setProperty("background", "rgba(255,255,255,0.2)");
+                slider.getStyle().setProperty("transform", "translateX(0px)");
+            }
+        });
         
         return toggleSwitch;
     }

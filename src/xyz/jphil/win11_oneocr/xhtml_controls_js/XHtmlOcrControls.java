@@ -139,15 +139,15 @@ public class XHtmlOcrControls {
     }
     
     private void createMultiPageControlPanel() {
-        // Global controls for sticky control bar
+        // Global controls for sticky control bar - all OFF by default for clean XHTML experience
         var globalControls = List.of(
             new UIElementFactory.ControlConfig("toggle-line-boxes", "Line Boxes", false),
-            new UIElementFactory.ControlConfig("toggle-word-boxes", "Word Boxes", true),
-            new UIElementFactory.ControlConfig("toggle-xhtml-text", "XHTML Text", true),
+            new UIElementFactory.ControlConfig("toggle-word-boxes", "Word Boxes", false),
+            new UIElementFactory.ControlConfig("toggle-xhtml-text", "XHTML Text", true),  // Keep original XHTML visible
             new UIElementFactory.ControlConfig("toggle-svg-text", "SVG Text", false),
-            new UIElementFactory.ControlConfig("toggle-hover-controls", "Hover Controls", true),
-            new UIElementFactory.ControlConfig("toggle-svg-section", "SVG Section", true),
-            new UIElementFactory.ControlConfig("toggle-svg-background", "SVG Background", true)
+            new UIElementFactory.ControlConfig("toggle-hover-controls", "Hover Controls", false),
+            new UIElementFactory.ControlConfig("toggle-svg-section", "SVG Section", false),
+            new UIElementFactory.ControlConfig("toggle-svg-background", "SVG Background", false)
         );
         
         // Create sticky control bar at top
@@ -173,15 +173,15 @@ public class XHtmlOcrControls {
     }
     
     private void createSinglePageControlPanel() {
-        // Use same sticky control bar for single-page (works for both cases)
+        // Use same sticky control bar for single-page - all OFF by default for clean XHTML experience
         var globalControls = List.of(
             new UIElementFactory.ControlConfig("toggle-line-boxes", "Line Boxes", false),
-            new UIElementFactory.ControlConfig("toggle-word-boxes", "Word Boxes", true),
-            new UIElementFactory.ControlConfig("toggle-xhtml-text", "XHTML Text", true),
+            new UIElementFactory.ControlConfig("toggle-word-boxes", "Word Boxes", false),
+            new UIElementFactory.ControlConfig("toggle-xhtml-text", "XHTML Text", true),  // Keep original XHTML visible
             new UIElementFactory.ControlConfig("toggle-svg-text", "SVG Text", false),
-            new UIElementFactory.ControlConfig("toggle-hover-controls", "Hover Controls", true),
-            new UIElementFactory.ControlConfig("toggle-svg-section", "SVG Section", true),
-            new UIElementFactory.ControlConfig("toggle-svg-background", "SVG Background", true)
+            new UIElementFactory.ControlConfig("toggle-hover-controls", "Hover Controls", false),
+            new UIElementFactory.ControlConfig("toggle-svg-section", "SVG Section", false),
+            new UIElementFactory.ControlConfig("toggle-svg-background", "SVG Background", false)
         );
         
         var stickyControlBar = UIElementFactory.createStickyControlBar(globalControls);
