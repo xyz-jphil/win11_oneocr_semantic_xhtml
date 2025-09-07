@@ -95,6 +95,10 @@ public class XHtmlOcrControls {
             allPagesData.add(pageData);
         });
         
+        // Setup HTML sections (including confidence badges)
+        debug("Setting up HTML sections...");
+        setupHTMLSection();
+        
         // Create document-level controls
         debug("Creating document controls...");
         createDocumentControls();
@@ -131,14 +135,11 @@ public class XHtmlOcrControls {
     private void createDocumentControls() {
         debug("Creating document-level control panel...");
         
-        if (isMultiPageDocument) {
-            createMultiPageControlPanel();
-        } else {
-            createSinglePageControlPanel();
-        }
+        // Unified control panel for both single and multi-page documents
+        createControlPanel();
     }
     
-    private void createMultiPageControlPanel() {
+    private void createControlPanel() {
         // Global controls for sticky control bar - all OFF by default for clean XHTML experience
         var globalControls = List.of(
             new UIElementFactory.ControlConfig("toggle-line-boxes", "Line Boxes", false),
@@ -150,42 +151,175 @@ public class XHtmlOcrControls {
             new UIElementFactory.ControlConfig("toggle-svg-background", "SVG Background", false)
         );
         
-        // Create sticky control bar at top
+        // Create sticky control bar at top (without metadata)
         var stickyControlBar = UIElementFactory.createStickyControlBar(globalControls);
         document.getBody().insertBefore(stickyControlBar, document.getBody().getFirstChild());
         
-        // Add document info to body (after control bar)
-        var docInfo = pageManager.getDocumentMetadata();
-        var infoPanel = (HTMLElement) document.createElement("div");
-        infoPanel.setClassName("document-info-panel");
-        infoPanel.setInnerHTML("<div style='padding: 8px 16px; background: #f8f9fa; border-bottom: 1px solid #dee2e6; font-size: 13px;'>" +
-                              "<strong>" + docInfo.pageCount() + " pages</strong> | " + 
-                              docInfo.totalWords() + " words | " + 
-                              Math.round(docInfo.averageConfidence() * 1000.0) / 10.0 + "% avg confidence</div>");
+        // Create separate metadata section below control bar
+        createMetadataSection();
+    }
+    
+    /**
+     * Create a clean metadata section below the navigation bar.
+     */
+    private void createMetadataSection() {
+        var metadataSection = (HTMLElement) document.createElement("div");
+        metadataSection.setId("metadata-section");
+        metadataSection.setClassName("metadata-section");
         
-        // Insert info panel after control bar
+        // Style the metadata section
+        var sectionStyle = "background: #f8f9fa; " +
+                          "border-bottom: 1px solid #dee2e6; " +
+                          "padding: 12px 20px; " +
+                          "display: flex; " +
+                          "justify-content: space-between; " +
+                          "align-items: center; " +
+                          "font-size: 13px; " +
+                          "color: #495057; " +
+                          "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;";
+        metadataSection.getStyle().setCssText(sectionStyle);
+        
+        var docInfo = pageManager.getDocumentMetadata();
+        
+        // Check if we have valid metadata - hide section if no meaningful data
+        boolean hasValidData = docInfo.totalWords() > 0 || docInfo.averageConfidence() > 0.0;
+        if (!hasValidData) {
+            debug("No valid metadata found - hiding metadata section");
+            return; // Don't create metadata section if no data
+        }
+        
+        // Left side - document stats
+        var leftInfo = (HTMLElement) document.createElement("div");
+        leftInfo.getStyle().setCssText("display: flex; align-items: center; gap: 20px;");
+        
+        // Basic stats
+        var statsSpan = (HTMLElement) document.createElement("span");
+        statsSpan.setInnerHTML("📄 <strong>" + docInfo.pageCount() + "</strong> pages • " + 
+                              "🔤 <strong>" + docInfo.totalWords() + "</strong> words • " + 
+                              "🎯 <strong>" + Math.round(docInfo.averageConfidence() * 1000.0) / 10.0 + "%</strong> confidence");
+        leftInfo.appendChild(statsSpan);
+        
+        // Right side - timestamp
+        var rightInfo = (HTMLElement) document.createElement("div");
+        rightInfo.getStyle().setCssText("display: flex; align-items: center; gap: 15px; color: #6c757d;");
+        
+        // OCR processing timestamp from XHTML meta tags
+        var ocrDate = parseMetaContent("date", "");
+        if (!ocrDate.isEmpty()) {
+            var timestampSpan = (HTMLElement) document.createElement("span");
+            timestampSpan.getStyle().setCssText("font-family: monospace; font-size: 12px;");
+            timestampSpan.setTextContent("🕒 OCR: " + formatOCRTimestamp(ocrDate));
+            rightInfo.appendChild(timestampSpan);
+        }
+        
+        metadataSection.appendChild(leftInfo);
+        metadataSection.appendChild(rightInfo);
+        
+        // Insert after control bar
         var controlBar = document.getElementById("top-control-bar");
         if (controlBar != null && controlBar.getNextSibling() != null) {
-            document.getBody().insertBefore(infoPanel, controlBar.getNextSibling());
+            document.getBody().insertBefore(metadataSection, controlBar.getNextSibling());
+        } else if (controlBar != null) {
+            document.getBody().appendChild(metadataSection);
         } else {
-            document.getBody().appendChild(infoPanel);
+            // Fallback: insert at beginning of body
+            document.getBody().insertBefore(metadataSection, document.getBody().getFirstChild());
         }
     }
     
-    private void createSinglePageControlPanel() {
-        // Use same sticky control bar for single-page - all OFF by default for clean XHTML experience
-        var globalControls = List.of(
-            new UIElementFactory.ControlConfig("toggle-line-boxes", "Line Boxes", false),
-            new UIElementFactory.ControlConfig("toggle-word-boxes", "Word Boxes", false),
-            new UIElementFactory.ControlConfig("toggle-xhtml-text", "XHTML Text", true),  // Keep original XHTML visible
-            new UIElementFactory.ControlConfig("toggle-svg-text", "SVG Text", false),
-            new UIElementFactory.ControlConfig("toggle-hover-controls", "Hover Controls", false),
-            new UIElementFactory.ControlConfig("toggle-svg-section", "SVG Section", false),
-            new UIElementFactory.ControlConfig("toggle-svg-background", "SVG Background", false)
-        );
+    private String extractFilename(String fullPath) {
+        if (fullPath == null || fullPath.isEmpty()) return "Unknown";
+        var lastSlash = Math.max(fullPath.lastIndexOf('/'), fullPath.lastIndexOf('\\'));
+        return lastSlash >= 0 ? fullPath.substring(lastSlash + 1) : fullPath;
+    }
+    
+    /**
+     * Parse string meta content from document.
+     */
+    private String parseMetaContent(String metaName, String defaultValue) {
+        var meta = document.querySelector("meta[name=\"" + metaName + "\"]");
+        if (meta != null) {
+            var content = meta.getAttribute("content");
+            return content != null ? content : defaultValue;
+        }
+        return defaultValue;
+    }
+    
+    /**
+     * Format OCR timestamp from ISO format to readable format.
+     * Input: "2025-08-24T23:09:32.087421Z"
+     * Output: "Aug 24, 23:09"
+     */
+    private String formatOCRTimestamp(String isoTimestamp) {
+        try {
+            // Extract date and time parts from ISO format
+            // Format: 2025-08-24T23:09:32.087421Z
+            if (isoTimestamp.length() >= 16 && isoTimestamp.contains("T")) {
+                var datePart = isoTimestamp.substring(0, 10); // 2025-08-24
+                var timePart = isoTimestamp.substring(11, 16); // 23:09
+                
+                // Extract month and day
+                var parts = datePart.split("-");
+                if (parts.length >= 3) {
+                    var month = Integer.parseInt(parts[1]);
+                    var day = Integer.parseInt(parts[2]);
+                    
+                    String[] monthNames = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                         "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+                    
+                    if (month >= 1 && month <= 12) {
+                        return monthNames[month - 1] + " " + day + ", " + timePart;
+                    }
+                }
+            }
+            
+            // Fallback - just show the first part
+            return isoTimestamp.substring(0, Math.min(16, isoTimestamp.length()));
+        } catch (Exception e) {
+            // If parsing fails, return truncated original
+            return isoTimestamp.length() > 20 ? isoTimestamp.substring(0, 20) : isoTimestamp;
+        }
+    }
+    
+    /**
+     * Add a small confidence badge to each page showing per-page confidence.
+     * Helps users identify pages with low confidence quickly.
+     */
+    private void addPageConfidenceBadge(HTMLElement pageSection, double confidence, int pageNumber) {
+        // Only show badge if there's valid confidence data
+        if (confidence <= 0.0) {
+            debug("Page " + pageNumber + ": No confidence data (" + confidence + ") - skipping badge");
+            return;
+        }
         
-        var stickyControlBar = UIElementFactory.createStickyControlBar(globalControls);
-        document.getBody().insertBefore(stickyControlBar, document.getBody().getFirstChild());
+        var badge = (HTMLElement) document.createElement("div");
+        badge.setClassName("page-confidence-badge");
+        
+        // Convert confidence to percentage and determine color
+        var confidencePercent = Math.round(confidence * 100.0);// / 10.0;
+        var badgeClass = confidencePercent >= 80 ? "high" : (confidencePercent >= 50 ? "med" : "low");
+        
+        debug("Page " + pageNumber + ": Adding confidence badge " + confidencePercent + "% (" + badgeClass + ")");
+        
+        // Position badge to avoid overlap with copy button (which is at top: 5px; right: 5px)
+        var badgeStyle = "position: absolute; " +
+                        "top: 2px; " +
+                        "left: 2px; " +  // Move to left side to avoid copy button
+                        "background: " + (badgeClass.equals("high") ? "#28a745" : 
+                                         (badgeClass.equals("med") ? "#ffc107" : "#dc3545")) + "; " +
+                        "color: white; " +
+                        "padding: 4px 8px; " +
+                        "border-radius: 12px; " +
+                        "font-size: 11px; " +
+                        "font-weight: bold; " +
+                        "z-index: 40; " +  // Higher than copy button (z-index: 30)
+                        "box-shadow: 0 2px 4px rgba(0,0,0,0.2);";
+        
+        badge.getStyle().setCssText(badgeStyle);
+        badge.setTextContent("🎯 " + confidencePercent + "%");
+        badge.setTitle("Page " + pageNumber + " confidence: " + confidencePercent + "%");
+        
+        pageSection.appendChild(badge);
     }
     
     private void createAllSVGSections() {
@@ -227,13 +361,11 @@ public class XHtmlOcrControls {
             """;
         svgContainer.getStyle().setCssText(containerStyle);
         
-        // Add page number header for multi-page documents
-        if (isMultiPageDocument) {
-            var pageHeader = (HTMLElement) document.createElement("h3");
-            pageHeader.setTextContent("Page " + pageNumber + " - SVG Visualization");
-            pageHeader.getStyle().setCssText("margin-top: 0; color: #666;");
-            svgContainer.appendChild(pageHeader);
-        }
+        // Add page number header
+        var pageHeader = (HTMLElement) document.createElement("h3");
+        pageHeader.setTextContent("Page " + pageNumber + " - SVG Visualization");
+        pageHeader.getStyle().setCssText("margin-top: 0; color: #666;");
+        svgContainer.appendChild(pageHeader);
         
         // Generate SVG for this specific page data
         var svg = generateSVGFromPageData(pageData);
@@ -259,39 +391,6 @@ public class XHtmlOcrControls {
         }
     }
     
-    private void createControlPanel() {
-        var controlPanel = (HTMLElement) document.createElement("div");
-        controlPanel.setClassName("control-panel");
-        
-        // Create control elements using static utility methods
-        createHoverHint(controlPanel);
-        createTitle(controlPanel, "OCR Display Controls");
-        
-        // Control groups using switch expressions for default values
-        var controls = List.of(
-            new ControlConfig("toggle-line-boxes", "Line Boxes", false),
-            new ControlConfig("toggle-word-boxes", "Word Boxes", true),
-            new ControlConfig("toggle-xhtml-text", "Text Content (XHTML)", true),
-            new ControlConfig("toggle-svg-text", "Text Content (SVG)", false),
-            new ControlConfig("toggle-hover-controls", "Hover Controls", true),
-            new ControlConfig("toggle-svg-section", "SVG Section", true),
-            new ControlConfig("toggle-svg-background", "SVG Background", true)
-        );
-        
-        controls.forEach(config -> controlPanel.appendChild(createControlGroup(config)));
-        
-        // Confidence legend
-        controlPanel.appendChild(createConfidenceLegend());
-        
-        // Stats container
-        var stats = createStatsContainer();
-        controlPanel.appendChild(stats);
-        
-        document.getBody().appendChild(controlPanel);
-        debug("Control panel added to DOM");
-        updateStats();
-    }
-    
     // ControlConfig record moved to UIElementFactory - using static import
     
     // UI creation methods moved to UIElementFactory - using static imports
@@ -313,10 +412,20 @@ public class XHtmlOcrControls {
     }
     
     private void setupHTMLSectionForPage(HTMLElement pageSection, int pageIndex, int pageNumber) {
+        debug("Setting up HTML section for page " + pageNumber + " (index: " + pageIndex + ")");
+        debug("allPagesData.size(): " + allPagesData.size());
+        
         // Apply confidence classes for this specific page
         if (pageIndex < allPagesData.size()) {
             var pageData = allPagesData.get(pageIndex);
+            debug("Page " + pageNumber + " data: lines=" + pageData.lines().size() + ", confidence=" + pageData.metadata().averageConfidence());
+            
             pageData.lines().forEach(line -> applyConfidenceClassesForPage(line, pageSection));
+            
+            // Add per-page confidence badge (nice to have feature)
+            addPageConfidenceBadge(pageSection, pageData.metadata().averageConfidence(), pageNumber);
+        } else {
+            debug("WARNING: Page " + pageNumber + " index " + pageIndex + " >= allPagesData.size() " + allPagesData.size());
         }
         
         // Add hover controls for this page
@@ -383,7 +492,6 @@ public class XHtmlOcrControls {
     private void showLineControls(MouseEvent event, int lineIndex, HTMLElement segment) {
         hideControls();
         
-        // For single page, use first page data
         var currentPageData = !allPagesData.isEmpty() ? allPagesData.get(0) : createEmptyOCRData();
         if (lineIndex >= currentPageData.lines().size()) return;
         
@@ -424,14 +532,12 @@ public class XHtmlOcrControls {
     // Text extraction and clipboard methods moved to TextUtilities - using static imports
     
     private void copyLineText(int lineIndex) {
-        // For single page, use first page data
         var currentPageData = !allPagesData.isEmpty() ? allPagesData.get(0) : createEmptyOCRData();
         if (lineIndex >= currentPageData.lines().size()) return;
         copyLineTextWithNotification(currentPageData.lines().get(lineIndex));
     }
     
     private void copyPageText() {
-        // For single page, use first page data
         var currentPageData = !allPagesData.isEmpty() ? allPagesData.get(0) : createEmptyOCRData();
         copyPageTextWithNotification(currentPageData.lines());
     }
@@ -480,7 +586,6 @@ public class XHtmlOcrControls {
     }
     
     private HTMLElement generateSVGFromVirtualDOM() {
-        // For single page, use first page data
         var currentPageData = !allPagesData.isEmpty() ? allPagesData.get(0) : createEmptyOCRData();
         var metadata = currentPageData.metadata();
         var svg = (HTMLElement)document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -660,7 +765,6 @@ public class XHtmlOcrControls {
     private void exportLineSVGToConsole(int lineIndex) {
         console("\n=== DEBUG: SVG Elements for Line " + (lineIndex + 1) + " ===");
         
-        // For single page, use first page data
         var currentPageData = !allPagesData.isEmpty() ? allPagesData.get(0) : createEmptyOCRData();
         if (lineIndex >= currentPageData.lines().size()) {
             console("No data for line " + (lineIndex + 1));
@@ -740,7 +844,6 @@ public class XHtmlOcrControls {
         var statsDiv = document.getElementById("ocr-stats");
         if (statsDiv == null || allPagesData.isEmpty()) return;
         
-        // For single page, use first page data
         var currentPageData = allPagesData.get(0);
         var meta = currentPageData.metadata();
         var statsHtml = "<div>" + meta.totalLines() + " lines, " + meta.totalWords() + " words</div>" +
@@ -798,7 +901,6 @@ public class XHtmlOcrControls {
     // DOM manipulation methods moved to DomUtilities - using static imports with global document
     
     private Optional<Element> addBackgroundLayer(Element svg) {
-        // For single page, use first page data
         var currentPageData = !allPagesData.isEmpty() ? allPagesData.get(0) : createEmptyOCRData();
         currentPageData.backgroundImagePath().ifPresent(imagePath -> {
             var bgGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
@@ -845,7 +947,6 @@ public class XHtmlOcrControls {
     }
     
     private Optional<Element> addWordLayers(Element svg) {
-        // For single page, use first page data
         var currentPageData = !allPagesData.isEmpty() ? allPagesData.get(0) : createEmptyOCRData();
         var metadata = currentPageData.metadata();
         

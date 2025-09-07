@@ -1,7 +1,7 @@
 /* OCR XHTML Semantic Styling */
 body {
     margin: 0;
-    padding: 20px;
+    padding: 0;
     font-family: Arial, sans-serif;
     background-color: #f5f5f5;
     position: relative;
@@ -11,7 +11,7 @@ body {
 section.win11OneOcrPage {
     position: relative;
     max-width: 800px;
-    margin: 0 auto;
+    margin: 0 auto 20px auto; /* Added 20px bottom margin for page separation */
     background: white;
     border: 1px solid #ddd;
     border-radius: 8px;
