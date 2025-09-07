@@ -9,7 +9,6 @@ import org.teavm.jso.dom.xml.Element;
 import org.teavm.jso.browser.Window;
 
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import java.util.stream.IntStream;
 import org.teavm.jso.dom.html.HTMLDocument;
 import org.teavm.jso.dom.html.HTMLButtonElement;
@@ -17,7 +16,7 @@ import org.teavm.jso.dom.html.HTMLElement;
 import org.teavm.jso.dom.html.HTMLInputElement;
 
 // Static imports for utility methods - organized in utilities sub-package
-import static xyz.jphil.win11_oneocr.xhtml_controls_js.utilities.AttributeParser.*;
+import org.teavm.jso.dom.xml.NodeList;
 import static xyz.jphil.win11_oneocr.xhtml_controls_js.utilities.DomUtilities.*;
 import static xyz.jphil.win11_oneocr.xhtml_controls_js.utilities.OCRDataFactory.*;
 import static xyz.jphil.win11_oneocr.xhtml_controls_js.utilities.SvgUtilities.*;
@@ -84,48 +83,116 @@ public class XHtmlOcrControls {
         isMultiPageDocument = pageManager.isMultiPage();
         debug("Document type: " + (isMultiPageDocument ? "Multi-page" : "Single-page"));
         
-        // Clean up any existing content
-        debug("Cleaning up DOM...");
-        cleanupDOM();
+        var pageCount = pageManager.getPageCount();
         
-        // Process all pages
-        debug("Processing pages...");
-        pageManager.processAllPages((pageElement, pageNumber, isMultiPage) -> {
-            var pageData = pageProcessor.processPage(pageElement, pageNumber, isMultiPage);
-            allPagesData.add(pageData);
-        });
-        
-        // Setup HTML sections (including confidence badges)
-        debug("Setting up HTML sections...");
-        setupHTMLSection();
-        
-        // Create document-level controls
-        debug("Creating document controls...");
-        createDocumentControls();
-        
-        // Create page-level SVG sections
-        debug("Creating SVG sections...");
-        createAllSVGSections();
-        
-        // Bind global event handlers
-        debug("Binding event handlers...");
-        bindDocumentEventHandlers();
-        
-        // Update display
-        debug("Updating display...");
-        updateDisplay();
-        
-        state = state.withInitialized(true);
-        debug("Multi-page OCR Viewer initialized successfully!");
-        debug("Processed " + allPagesData.size() + " pages");
-        
-        // Debug export for first page
-        if (!allPagesData.isEmpty()) {
-            debug("Exporting debug info for first page...");
-            exportPageDebugInfo(0);
+        // Show loading indicator for large documents during initialization
+        if (pageCount > 50) {
+            showLoadingIndicator("Loading " + pageCount + " pages...");
+            
+            // Small delay to ensure loading indicator appears before heavy processing
+            org.teavm.jso.browser.Window.setTimeout(() -> {
+                performInitialization(); // This will handle hiding indicator when complete
+            }, 50);
+        } else {
+            // Small documents - initialize immediately
+            performInitialization();
+            debug("initializeOCRViewer() completed");
         }
-        
-        debug("initializeOCRViewer() completed");
+    }
+    
+    /**
+     * Perform the actual initialization work (extracted for loading indicator support).
+     */
+    private void performInitialization() {
+        performInitializationSteps(0);
+    }
+    
+    /**
+     * Perform initialization in steps with progress updates.
+     */
+    private void performInitializationSteps(int step) {
+        switch (step) {
+            case 0:
+                updateProgress(10);
+                debug("Cleaning up DOM...");
+                cleanupDOM();
+                
+                org.teavm.jso.browser.Window.setTimeout(() -> performInitializationSteps(1), 20);
+                break;
+                
+            case 1:
+                updateProgress(20);
+                debug("Processing pages...");
+                pageManager.processAllPages((pageElement, pageNumber, isMultiPage) -> {
+                    var pageData = pageProcessor.processPage(pageElement, pageNumber, isMultiPage);
+                    allPagesData.add(pageData);
+                });
+                
+                org.teavm.jso.browser.Window.setTimeout(() -> performInitializationSteps(2), 20);
+                break;
+                
+            case 2:
+                updateProgress(40);
+                debug("Setting up HTML sections...");
+                setupHTMLSection();
+                
+                org.teavm.jso.browser.Window.setTimeout(() -> performInitializationSteps(3), 20);
+                break;
+                
+            case 3:
+                updateProgress(60);
+                debug("Creating document controls...");
+                createDocumentControls();
+                
+                org.teavm.jso.browser.Window.setTimeout(() -> performInitializationSteps(4), 20);
+                break;
+                
+            case 4:
+                updateProgress(75);
+                debug("Creating SVG sections...");
+                createAllSVGSections();
+                
+                org.teavm.jso.browser.Window.setTimeout(() -> performInitializationSteps(5), 20);
+                break;
+                
+            case 5:
+                updateProgress(85);
+                debug("Binding event handlers...");
+                bindDocumentEventHandlers();
+                
+                org.teavm.jso.browser.Window.setTimeout(() -> performInitializationSteps(6), 20);
+                break;
+                
+            case 6:
+                updateProgress(95);
+                debug("Updating display...");
+                // For initial display, use immediate processing (all toggles are OFF)
+                var sections = document.querySelectorAll("section.win11OneOcrPage");
+                for (int pageIndex = 0; pageIndex < sections.getLength(); pageIndex++) {
+                    var section = (HTMLElement) sections.get(pageIndex);
+                    updateDisplayForPage(section, pageIndex + 1);
+                }
+                
+                org.teavm.jso.browser.Window.setTimeout(() -> performInitializationSteps(7), 20);
+                break;
+                
+            case 7:
+                updateProgress(100);
+                state = state.withInitialized(true);
+                debug("Multi-page OCR Viewer initialized successfully!");
+                debug("Processed " + allPagesData.size() + " pages");
+                
+                // Debug export for first page
+                if (!allPagesData.isEmpty()) {
+                    debug("Exporting debug info for first page...");
+                    exportPageDebugInfo(0);
+                }
+                
+                // Hide loading indicator after initialization completes
+                hideLoadingIndicator();
+                debug("initializeOCRViewer() completed");
+                break;
+        }
     }
     
     // Old single-page methods removed - now handled by OCRPageProcessor
@@ -288,7 +355,6 @@ public class XHtmlOcrControls {
     private void addPageConfidenceBadge(HTMLElement pageSection, double confidence, int pageNumber) {
         // Only show badge if there's valid confidence data
         if (confidence <= 0.0) {
-            debug("Page " + pageNumber + ": No confidence data (" + confidence + ") - skipping badge");
             return;
         }
         
@@ -296,10 +362,8 @@ public class XHtmlOcrControls {
         badge.setClassName("page-confidence-badge");
         
         // Convert confidence to percentage and determine color
-        var confidencePercent = Math.round(confidence * 100.0);// / 10.0;
+        var confidencePercent = Math.round(confidence * 100.0);
         var badgeClass = confidencePercent >= 80 ? "high" : (confidencePercent >= 50 ? "med" : "low");
-        
-        debug("Page " + pageNumber + ": Adding confidence badge " + confidencePercent + "% (" + badgeClass + ")");
         
         // Position badge to avoid overlap with copy button (which is at top: 5px; right: 5px)
         var badgeStyle = "position: absolute; " +
@@ -412,20 +476,13 @@ public class XHtmlOcrControls {
     }
     
     private void setupHTMLSectionForPage(HTMLElement pageSection, int pageIndex, int pageNumber) {
-        debug("Setting up HTML section for page " + pageNumber + " (index: " + pageIndex + ")");
-        debug("allPagesData.size(): " + allPagesData.size());
-        
         // Apply confidence classes for this specific page
         if (pageIndex < allPagesData.size()) {
             var pageData = allPagesData.get(pageIndex);
-            debug("Page " + pageNumber + " data: lines=" + pageData.lines().size() + ", confidence=" + pageData.metadata().averageConfidence());
-            
             pageData.lines().forEach(line -> applyConfidenceClassesForPage(line, pageSection));
             
             // Add per-page confidence badge (nice to have feature)
             addPageConfidenceBadge(pageSection, pageData.metadata().averageConfidence(), pageNumber);
-        } else {
-            debug("WARNING: Page " + pageNumber + " index " + pageIndex + " >= allPagesData.size() " + allPagesData.size());
         }
         
         // Add hover controls for this page
@@ -698,12 +755,138 @@ public class XHtmlOcrControls {
         var sections = document.querySelectorAll("section.win11OneOcrPage");
         debug("Found " + sections.getLength() + " page sections to update");
         
-        for (int pageIndex = 0; pageIndex < sections.getLength(); pageIndex++) {
-            var section = (HTMLElement) sections.get(pageIndex);
-            updateDisplayForPage(section, pageIndex + 1);
+        // Show loading indicator for large documents
+        if (sections.getLength() > 50) {
+            showLoadingIndicator("Processing " + sections.getLength() + " pages...");
+            
+            // Small delay to ensure loading indicator appears before processing
+            org.teavm.jso.browser.Window.setTimeout(() -> {
+                processAllPagesWithProgress(sections, () -> {
+                    hideLoadingIndicator();
+                    debug("updateDisplay() completed for all pages");
+                });
+            }, 50); // 50ms delay
+        } else {
+            // Small documents - process immediately
+            for (int pageIndex = 0; pageIndex < sections.getLength(); pageIndex++) {
+                var section = (HTMLElement) sections.get(pageIndex);
+                updateDisplayForPage(section, pageIndex + 1);
+            }
+            debug("updateDisplay() completed for all pages");
+        }
+    }
+    
+    /**
+     * Process all pages (used with loading indicator).
+     */
+    private void processAllPages(NodeList sections) {
+        processPagesBatch(sections, 0, sections.getLength(), null);
+    }
+    
+    /**
+     * Process all pages with progress updates and completion callback.
+     */
+    private void processAllPagesWithProgress(NodeList sections, Runnable onComplete) {
+        processPagesBatch(sections, 0, sections.getLength(), onComplete);
+    }
+    
+    /**
+     * Process pages in small batches with progress updates.
+     */
+    private void processPagesBatch(NodeList sections, int startIndex, int totalPages, Runnable onComplete) {
+        final int batchSize = 10; // Process 10 pages per batch
+        int endIndex = Math.min(startIndex + batchSize, totalPages);
+        
+        // Process current batch
+        for (int i = startIndex; i < endIndex; i++) {
+            var section = (HTMLElement) sections.get(i);
+            updateDisplayForPage(section, i + 1);
         }
         
-        debug("updateDisplay() completed for all pages");
+        // Update progress
+        var progress = Math.round((endIndex * 100.0) / totalPages);
+        updateProgress(progress);
+        
+        // Continue with next batch or finish
+        if (endIndex < totalPages) {
+            org.teavm.jso.browser.Window.setTimeout(() -> {
+                processPagesBatch(sections, endIndex, totalPages, onComplete);
+            }, 1); // Very small delay to allow UI update
+        } else if (onComplete != null) {
+            onComplete.run();
+        }
+    }
+    
+    /**
+     * Show loading indicator with circular progress.
+     */
+    private void showLoadingIndicator(String message) {
+        var existing = document.getElementById("loading-indicator");
+        if (existing != null) {
+            var messageEl = existing.querySelector(".loading-message");
+            if (messageEl != null) {
+                messageEl.setTextContent(message);
+            }
+            return;
+        }
+        
+        var indicator = (HTMLElement) document.createElement("div");
+        indicator.setId("loading-indicator");
+        
+        // Create circular progress SVG
+        var progressHtml = "<div style='display: flex; align-items: center; gap: 12px;'>" +
+                          "<svg width='32' height='32' style='transform: rotate(-90deg);'>" +
+                          "<circle cx='16' cy='16' r='12' fill='none' stroke='rgba(255,255,255,0.3)' stroke-width='3'/>" +
+                          "<circle id='progress-circle' cx='16' cy='16' r='12' fill='none' stroke='#4CAF50' stroke-width='3' " +
+                          "stroke-dasharray='75.4' stroke-dashoffset='75.4' stroke-linecap='round'/>" +
+                          "</svg>" +
+                          "<div style='display: flex; flex-direction: column; align-items: flex-start;'>" +
+                          "<div class='loading-message' style='font-size: 14px; font-weight: 500;'>" + message + "</div>" +
+                          "<div id='progress-text' style='font-size: 12px; opacity: 0.8; margin-top: 2px;'>0%</div>" +
+                          "</div>" +
+                          "</div>";
+        
+        indicator.setInnerHTML(progressHtml);
+        
+        var style = "position: fixed; " +
+                   "top: 50%; " +
+                   "left: 50%; " +
+                   "transform: translate(-50%, -50%); " +
+                   "background: rgba(0, 0, 0, 0.85); " +
+                   "color: white; " +
+                   "padding: 20px 24px; " +
+                   "border-radius: 8px; " +
+                   "z-index: 9999; " +
+                   "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; " +
+                   "box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);";
+        
+        indicator.getStyle().setCssText(style);
+        document.getBody().appendChild(indicator);
+    }
+    
+    /**
+     * Update progress indicator.
+     */
+    private void updateProgress(long percentage) {
+        var progressCircle = document.getElementById("progress-circle");
+        var progressText = document.getElementById("progress-text");
+        
+        if (progressCircle != null && progressText != null) {
+            // Calculate stroke-dashoffset for circular progress (circumference = 75.4)
+            var offset = 75.4 - (75.4 * percentage / 100.0);
+            progressCircle.setAttribute("stroke-dashoffset", String.valueOf(offset));
+            progressText.setTextContent(percentage + "%");
+        }
+    }
+    
+    /**
+     * Hide loading indicator.
+     */
+    private void hideLoadingIndicator() {
+        var indicator = document.getElementById("loading-indicator");
+        if (indicator != null) {
+            indicator.getParentNode().removeChild(indicator);
+        }
     }
     
     private void updateDisplayForPage(HTMLElement pageSection, int pageNumber) {
