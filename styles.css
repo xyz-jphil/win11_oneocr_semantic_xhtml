@@ -7,16 +7,47 @@ body {
     position: relative;
 }
 
-/* Container for the OCR content */
+/* Container for the OCR content - responsive layout */
 section.win11OneOcrPage {
     position: relative;
-    max-width: 800px;
+    max-width: none; /* Remove fixed width for responsive design */
     margin: 0 auto 20px auto; /* Added 20px bottom margin for page separation */
     background: white;
     border: 1px solid #ddd;
     border-radius: 8px;
     overflow: hidden;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    display: flex;
+    flex-direction: column;
+    width: 95%; /* Responsive width */
+}
+
+/* Page content container - flexible layout for side-by-side on wide screens */
+section.win11OneOcrPage .page-content-container {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+/* Wide screen layout - side by side */
+@media (min-width: 1200px) {
+    section.win11OneOcrPage .page-content-container {
+        flex-direction: row;
+        gap: 20px;
+    }
+    
+    section.win11OneOcrPage .ocrContent {
+        flex: 1;
+        min-width: 0; /* Allow shrinking */
+    }
+    
+    section.win11OneOcrPage .svg-content {
+        flex: 1;
+        min-width: 0; /* Allow shrinking */
+        margin-top: 0 !important; /* Override default margin */
+        border-top: none !important; /* Remove top border */
+        border-left: 2px solid #ddd !important; /* Add left border instead */
+    }
 }
 
 /* Background image removed from HTML section - only in SVG section now */
@@ -340,6 +371,76 @@ input:checked + .slider:before {
     font-size: 9px;
     color: #ccc;
     font-family: monospace;
+}
+
+/* Page navigation and anchor styling */
+.page-navigation-container {
+    display: block;
+    width: 95%;
+    margin: 0 auto;
+}
+
+.page-anchor {
+    height: 0;
+    overflow: hidden;
+    visibility: hidden;
+}
+
+.page-number-display {
+    text-align: center;
+    margin: 20px auto 10px;
+    max-width: 200px;
+}
+
+/* Page navigation controls styling */
+.page-navigation-controls button:hover {
+    background: rgba(255,255,255,0.2) !important;
+    transform: scale(1.05);
+}
+
+.page-navigation-controls input:focus {
+    outline: 2px solid rgba(255,255,255,0.5);
+    outline-offset: 2px;
+}
+
+/* Copy notification styling */
+#copy-notification {
+    animation: slideInRight 0.3s ease;
+}
+
+@keyframes slideInRight {
+    from {
+        opacity: 0;
+        transform: translateX(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Responsive adjustments for navigation */
+@media (max-width: 768px) {
+    .page-navigation-controls {
+        flex-wrap: wrap;
+        gap: 4px !important;
+    }
+    
+    .page-navigation-controls button {
+        padding: 6px 10px !important;
+        font-size: 16px !important;
+    }
+    
+    .page-navigation-controls input {
+        width: 60px !important;
+        padding: 6px 8px !important;
+    }
+    
+    .page-number-display {
+        font-size: 12px;
+        padding: 6px 12px;
+        margin: 15px auto 8px;
+    }
 }
 
 /* Animation for smooth transitions */

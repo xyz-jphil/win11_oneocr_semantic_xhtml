@@ -397,6 +397,9 @@ public class XHtmlOcrControls {
                 createSVGSectionForPage(pageElement.get(), pageData, i + 1);
             }
         }
+        
+        // Add page anchors and navigation aids after SVG sections are created
+        addPageAnchorsAndNumbers();
     }
     
     private void createSVGSectionForPage(HTMLElement pageElement, OCRData pageData, int pageNumber) {
@@ -408,6 +411,14 @@ public class XHtmlOcrControls {
             debug("ERROR: Missing .ocrContent element for page " + pageNumber);
             return;
         }
+        
+        // Create page content container for responsive layout
+        var pageContentContainer = (HTMLElement) document.createElement("div");
+        pageContentContainer.setClassName("page-content-container");
+        
+        // Move ocrContent into the container
+        ocrContent.getParentNode().removeChild(ocrContent);
+        pageContentContainer.appendChild(ocrContent);
         
         // Create SVG container for this specific page
         var svgContainer = (HTMLElement) document.createElement("div");
@@ -435,8 +446,12 @@ public class XHtmlOcrControls {
         var svg = generateSVGFromPageData(pageData);
         svgContainer.appendChild(svg);
         
-        // Insert after the ocrContent within this page
-        ocrContent.getParentNode().insertBefore(svgContainer, ocrContent.getNextSibling());
+        // Add SVG container to the page content container
+        pageContentContainer.appendChild(svgContainer);
+        
+        // Insert the page content container back into the page
+        pageElement.appendChild(pageContentContainer);
+        
         debug("SVG section created and inserted for page " + pageNumber);
     }
     
@@ -1225,4 +1240,55 @@ public class XHtmlOcrControls {
     // Clipboard methods moved to TextUtilities - using static imports
     
     // Enhanced element querying moved to DomUtilities - using static imports with global document
+    
+    /**
+     * Add page anchors and visual page numbers before each page for navigation aid.
+     * Implements requirement (i) from navigation enhancements.
+     */
+    private void addPageAnchorsAndNumbers() {
+        debug("Adding page anchors and visual page numbers...");
+        
+        var sections = document.querySelectorAll("section.win11OneOcrPage");
+        for (int i = 0; i < sections.getLength(); i++) {
+            var section = (HTMLElement) sections.get(i);
+            var pageNumber = i + 1;
+            
+            // Create page anchor
+            var pageAnchor = (HTMLElement) document.createElement("div");
+            pageAnchor.setId("page-" + pageNumber);
+            pageAnchor.setClassName("page-anchor");
+            
+            // Create visual page number display
+            var pageNumberDisplay = (HTMLElement) document.createElement("div");
+            pageNumberDisplay.setClassName("page-number-display");
+            pageNumberDisplay.setTextContent("Page " + pageNumber);
+            
+            // Style the page number display
+            var displayStyle = "background: linear-gradient(135deg, #2980b9, #3498db); " +
+                              "color: white; " +
+                              "padding: 8px 16px; " +
+                              "margin: 20px 0 10px 0; " +
+                              "border-radius: 6px; " +
+                              "font-size: 14px; " +
+                              "font-weight: bold; " +
+                              "text-align: center; " +
+                              "box-shadow: 0 2px 4px rgba(0,0,0,0.2); " +
+                              "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;";
+            
+            pageNumberDisplay.getStyle().setCssText(displayStyle);
+            
+            // Combine anchor and display into a container
+            var pageContainer = (HTMLElement) document.createElement("div");
+            pageContainer.setClassName("page-navigation-container");
+            pageContainer.appendChild(pageAnchor);
+            pageContainer.appendChild(pageNumberDisplay);
+            
+            // Insert before the page section
+            section.getParentNode().insertBefore(pageContainer, section);
+            
+            debug("Added page anchor and number for page " + pageNumber);
+        }
+        
+        debug("Page anchors and numbers added for " + sections.getLength() + " pages");
+    }
 }
