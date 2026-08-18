@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>OneOCR semantic XHTML — legacy asset host</title>
+<link rel="canonical" href="https://oneocr.github.io/semantic_xhtml/"/>
+<meta http-equiv="refresh" content="20; url=https://oneocr.github.io/semantic_xhtml/"/>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1b1d21;
+    --muted: #5c626d;
+    --rule: #dfe2e7;
+    --panel: #f6f7f9;
+    --accent: #1d4ed8;
+    --warn-bg: #fff8e6;
+    --warn-rule: #e8d59a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --fg: #e8eaee;
+      --muted: #a2a9b5;
+      --rule: #2c313a;
+      --panel: #1c1f25;
+      --accent: #8ab4ff;
+      --warn-bg: #241f12;
+      --warn-rule: #4f452a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 16px/1.65 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  main { max-width: 46rem; margin: 0 auto; padding: 3rem 1.25rem 4rem; }
+  h1 { font-size: 1.55rem; line-height: 1.25; margin: 0 0 0.35rem; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); margin: 0 0 2rem; }
+  h2 { font-size: 1.05rem; margin: 2rem 0 0.6rem; }
+  p { margin: 0 0 1rem; }
+  a { color: var(--accent); }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    padding: 1rem 1.15rem;
+    margin: 0 0 1.25rem;
+  }
+  .keep {
+    background: var(--warn-bg);
+    border: 1px solid var(--warn-rule);
+    border-radius: 8px;
+    padding: 1rem 1.15rem;
+    margin: 0 0 1.5rem;
+  }
+  code {
+    font: 0.875em/1.5 "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 0.1em 0.35em;
+    overflow-wrap: anywhere;
+  }
+  .keep code, .panel code { background: transparent; border: 0; padding: 0; }
+  ul { margin: 0 0 1rem; padding-left: 1.25rem; }
+  li { margin: 0 0 0.4rem; }
+  .cta { display: inline-block; margin: 0.25rem 0 0; font-weight: 600; }
+  footer { margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid var(--rule); color: var(--muted); font-size: 0.9rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>OneOCR semantic XHTML — legacy asset host</h1>
+  <p class="sub">This repository is frozen. Development moved to <a href="https://github.com/oneocr">github.com/oneocr</a> on 18 August 2026.</p>
+
+  <div class="keep">
+    <p><strong>The files here keep working, permanently.</strong> Every OCR document generated before the move links its stylesheet and script from this path:</p>
+    <ul>
+      <li><code>https://xyz-jphil.github.io/win11_oneocr_semantic_xhtml/styles.css</code></li>
+      <li><code>https://xyz-jphil.github.io/win11_oneocr_semantic_xhtml/scripts.js</code></li>
+    </ul>
+    <p>Those two URLs are deliberately left in place and served from this repository, so that already-generated documents continue to render exactly as they always did. They are not redirected — a redirect cannot carry a stylesheet.</p>
+  </div>
+
+  <h2>Where the project lives now</h2>
+  <div class="panel">
+    <p>Assets for new documents: <code>https://oneocr.github.io/semantic_xhtml/</code></p>
+    <p>Source: <a href="https://github.com/oneocr/semantic_xhtml">github.com/oneocr/semantic_xhtml</a></p>
+    <p>The command line tool, the FFM binding and the viewer controls: <a href="https://github.com/oneocr">github.com/oneocr</a></p>
+    <p><a class="cta" href="https://oneocr.github.io/semantic_xhtml/">Go to the current asset host &rarr;</a></p>
+  </div>
+
+  <h2>Why this repository was not simply moved</h2>
+  <p>Transferring a repository between GitHub organisations changes its Pages host, and GitHub Pages does not redirect across a transfer. Moving this one would have stripped the stylesheet and all interactivity from every document already produced and archived. Keeping it in place costs nothing and breaks nothing.</p>
+
+  <footer>Frozen 18 August 2026. No further changes will be made here.</footer>
+</main>
+</body>
+</html>

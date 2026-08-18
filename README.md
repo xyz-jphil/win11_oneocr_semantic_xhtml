@@ -1,3 +1,9 @@
+> **FROZEN — legacy asset host.** Development moved to [github.com/oneocr](https://github.com/oneocr) on 18 August 2026. This repository is not maintained and will not change.
+>
+> The two published files here are deliberately left in place and served permanently, because every OCR document generated before the move links them by absolute URL: `https://xyz-jphil.github.io/win11_oneocr_semantic_xhtml/styles.css` and `.../scripts.js`. GitHub Pages does not redirect across an organisation transfer, and a redirect cannot carry a stylesheet, so moving this repository would have stripped the styling and all interactivity from every already-archived document.
+>
+> Current source: [github.com/oneocr/semantic_xhtml](https://github.com/oneocr/semantic_xhtml). Current asset root for new documents: `https://oneocr.github.io/semantic_xhtml/`.
+
 # Win11 OneOCR Semantic XHTML5 Presentation Layer
 
 This repository provides the decoupled presentation layer for Win11 OneOCR Semantic XHTML5 documents. The styling and interactive features are hosted independently and referenced via CDN links, allowing rendering upgrades without document modification.
